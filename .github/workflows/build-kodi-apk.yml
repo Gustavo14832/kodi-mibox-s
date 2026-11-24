@@ -340,8 +340,19 @@ jobs:
             echo "✅ Using existing permanent release keystore from repository"
           fi
 
+          # Garantir que debug.keystore tenha a chave com alias androiddebugkey para o Gradle
+          rm -f ~/.android/debug.keystore
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            > /dev/null 2>&1
+
           cp -f "$KEYSTORE_FILE" ~/.android/kodi.keystore
-          cp -f "$KEYSTORE_FILE" ~/.android/debug.keystore
           echo "✅ Keystores installed"
 
       - name: Build Kodi
@@ -353,6 +364,11 @@ jobs:
           echo "✅ Kodi binaries compiled"
 
       - name: Package APK
+        env:
+          KODI_ANDROID_STORE_FILE: /home/runner/.android/kodi.keystore
+          KODI_ANDROID_KEY_ALIAS: mibox
+          KODI_ANDROID_STORE_PASSWORD: android
+          KODI_ANDROID_KEY_PASSWORD: android
         run: |
           set -euo pipefail
           BUILD_DIR=$HOME/kodi-build
@@ -380,6 +396,7 @@ jobs:
       - name: Sign and zipalign APK
         id: sign
         run: |
+          set -euo pipefail
           APK="${{ steps.locate.outputs.apk_path }}"
           CUSTOM="${{ github.event.inputs.apk_filename || 'Kodi-MiBox-S-Omega' }}"
           SAFE_NAME=$(echo "$CUSTOM" | sed 's/\.apk$//i' | tr ' ' '_')
@@ -389,7 +406,8 @@ jobs:
           ALIGNED="/tmp/aligned.apk"
           BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
 
-          "$BUILD_TOOLS/zipalign" -v 4 "$APK" "$ALIGNED"
+          rm -f "$ALIGNED" "$OUT"
+          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" "$ALIGNED"
           "$BUILD_TOOLS/apksigner" sign \
             --ks ~/.android/kodi.keystore \
             --ks-key-alias mibox \
@@ -397,6 +415,8 @@ jobs:
             --key-pass pass:android \
             --out "$OUT" \
             "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
 
           SIZE=$(du -sh "$OUT" | cut -f1)
           echo "✅ Signed APK: $OUT_NAME ($SIZE)"
