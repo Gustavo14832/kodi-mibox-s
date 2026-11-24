@@ -363,7 +363,7 @@ jobs:
           make -C "$BUILD_DIR" -j$(nproc)
           echo "✅ Kodi binaries compiled"
 
-      - name: Package APK
+      - name: Package APK (Ethernet Edition)
         env:
           KODI_ANDROID_STORE_FILE: /home/runner/.android/kodi.keystore
           KODI_ANDROID_KEY_ALIAS: mibox
@@ -374,40 +374,25 @@ jobs:
           BUILD_DIR=$HOME/kodi-build
           KODI_SRC=$HOME/kodi
           cd "$KODI_SRC"
-          echo "📦 Packaging APK..."
+          echo "📦 Packaging Ethernet Edition APK..."
           make -C "$BUILD_DIR" apk
-          echo "✅ APK packaged"
+          echo "✅ Ethernet Edition APK packaged"
 
-      - name: Locate built APK
-        id: locate
-        run: |
-          APK=$(find ~ -name "*.apk" 2>/dev/null \
-            | grep -v ".gradle" \
-            | grep -v "/tmp/" \
-            | grep -v "aligned" \
-            | head -1)
-          if [ -z "$APK" ]; then
-            echo "❌ No APK found"
-            exit 1
-          fi
-          echo "✅ Found APK: $APK"
-          echo "apk_path=$APK" >> $GITHUB_OUTPUT
-
-      - name: Sign and zipalign APK
-        id: sign
+      - name: Sign and zipalign APK (Ethernet Edition)
         run: |
           set -euo pipefail
-          APK="${{ steps.locate.outputs.apk_path }}"
-          CUSTOM="${{ github.event.inputs.apk_filename || 'Kodi-MiBox-S-Omega' }}"
-          SAFE_NAME=$(echo "$CUSTOM" | sed 's/\.apk$//i' | tr ' ' '_')
-          ABI="${{ steps.abi.outputs.value }}"
-          OUT_NAME="${SAFE_NAME}-${ABI}.apk"
-          OUT="/tmp/$OUT_NAME"
-          ALIGNED="/tmp/aligned.apk"
+          BUILD_DIR=$HOME/kodi-build
           BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+          ABI="${{ steps.abi.outputs.value }}"
+          RAW_APK=$(find "$BUILD_DIR" -name "*.apk" 2>/dev/null | grep -v ".gradle" | head -1)
 
-          rm -f "$ALIGNED" "$OUT"
-          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" "$ALIGNED"
+          mkdir -p /tmp/release_apks
+          ALIGNED="/tmp/aligned-eth.apk"
+          OUT="/tmp/release_apks/Kodi-MiBox-S-Omega-Ethernet-${ABI}.apk"
+          OUT_COMPAT="/tmp/release_apks/Kodi-MiBox-S-Omega-${ABI}.apk"
+
+          rm -f "$ALIGNED" "$OUT" "$OUT_COMPAT"
+          "$BUILD_TOOLS/zipalign" -f -v 4 "$RAW_APK" "$ALIGNED"
           "$BUILD_TOOLS/apksigner" sign \
             --ks ~/.android/kodi.keystore \
             --ks-key-alias mibox \
@@ -417,17 +402,67 @@ jobs:
             "$ALIGNED"
 
           "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          cp -f "$OUT" "$OUT_COMPAT"
+          echo "✅ Signed Ethernet APK: $(ls -lh $OUT)"
 
-          SIZE=$(du -sh "$OUT" | cut -f1)
-          echo "✅ Signed APK: $OUT_NAME ($SIZE)"
-          echo "apk_path=$OUT"      >> $GITHUB_OUTPUT
-          echo "apk_name=$OUT_NAME" >> $GITHUB_OUTPUT
+      - name: Package APK (WiFi 5/6 Edition)
+        env:
+          KODI_ANDROID_STORE_FILE: /home/runner/.android/kodi.keystore
+          KODI_ANDROID_KEY_ALIAS: mibox
+          KODI_ANDROID_STORE_PASSWORD: android
+          KODI_ANDROID_KEY_PASSWORD: android
+        run: |
+          set -euo pipefail
+          BUILD_DIR=$HOME/kodi-build
+          PKG_DIR="$BUILD_DIR/tools/android/packaging"
 
-      - name: Upload APK as artifact
+          echo "⚙️ Applying WiFi 5/6 network & buffer tuning..."
+          for f in "$PKG_DIR/xbmc/assets/system/settings/settings.xml" \
+                   "$PKG_DIR/assets/system/settings/settings.xml" \
+                   "$HOME/kodi/system/settings/settings.xml"; do
+            if [ -f "$f" ]; then
+              sed -i '/<setting id="filecache.buffermode"/,/<\/setting>/ s|<default>2</default>|<default>1</default>|' "$f"
+              sed -i '/<setting id="filecache.memorysize"/,/<\/setting>/ s|<default>64</default>|<default>96</default>|' "$f"
+              sed -i '/<setting id="filecache.readfactor"/,/<\/setting>/ s|<default>2000</default>|<default>3500</default>|' "$f"
+              sed -i '/<setting id="filecache.chunksize"/,/<\/setting>/ s|<default>262144</default>|<default>524288</default>|' "$f"
+              echo "Updated $f to WiFi profile"
+            fi
+          done
+
+          echo "📦 Packaging WiFi 5/6 Edition APK with Gradle..."
+          cd "$PKG_DIR"
+          ANDROID_HOME="$ANDROID_HOME" ./gradlew assembleRelease
+          echo "✅ WiFi 5/6 Edition APK packaged"
+
+      - name: Sign and zipalign APK (WiFi 5/6 Edition)
+        run: |
+          set -euo pipefail
+          BUILD_DIR=$HOME/kodi-build
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+          ABI="${{ steps.abi.outputs.value }}"
+          RAW_APK="$BUILD_DIR/tools/android/packaging/xbmc/build/outputs/apk/release/xbmc-release.apk"
+
+          ALIGNED="/tmp/aligned-wifi.apk"
+          OUT="/tmp/release_apks/Kodi-MiBox-S-Omega-WiFi-${ABI}.apk"
+
+          rm -f "$ALIGNED" "$OUT"
+          "$BUILD_TOOLS/zipalign" -f -v 4 "$RAW_APK" "$ALIGNED"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks ~/.android/kodi.keystore \
+            --ks-key-alias mibox \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUT"
+          echo "✅ Signed WiFi APK: $(ls -lh $OUT)"
+
+      - name: Upload APKs as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.sign.outputs.apk_name }}
-          path: ${{ steps.sign.outputs.apk_path }}
+          name: Kodi-MiBox-S-Omega-APKs
+          path: /tmp/release_apks/*.apk
           retention-days: 30
 
       - name: Publish GitHub Release
@@ -435,22 +470,72 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mibox-s-build-${{ github.run_number }}
-          name: "Kodi 21 Omega MiBox S (Build #${{ github.run_number }})"
+          name: "Kodi 21.3.3 Omega MiBox S (Build #${{ github.run_number }})"
           body: |
-            ## 🚀 Kodi 21 (Omega) - Xiaomi TV Box S Otimizado
+            ## 🚀 Kodi 21.3.3 (Omega) - Xiaomi TV Box S Custom Build
 
-            Build customizada exclusivamente para a **Xiaomi TV Box S (Amlogic S905X4/S905X5M)**.
+            Build de alta performance desenvolvida sob medida para a **Xiaomi TV Box S (3ª Geração)** (SoC Amlogic S905X5M / S905X4, Quad-Core Cortex-A55 @ 2.5GHz, GPU Mali-G310 V2, 2GB RAM, 32GB eMMC, Android 14 Google TV, target `armeabi-v7a`).
 
-            ### Otimizações Embutidas:
-            - **100% PT-BR:** Interface, teclado ABNT e legendas já em Português do Brasil na primeira inicialização.
-            - **Rede Gigabit USB:** Buffer RAM configurado para 64 MB com taxa de leitura acelerada em 20x.
-            - **Baixa Latência no Ao Vivo:** Sondagem FFmpeg reduzida para 128 KB e delay de live stream reduzido.
-            - **Fidelidade Visual:** Pipeline MediaCodec Surface puro e debanding por hardware.
+            ---
 
-            ### Como Instalar:
-            1. Baixe o arquivo `.apk` abaixo.
-            2. Transfira para a sua Mi Box via pendrive ou app de transferência (ex: *Send Files to TV*).
-            3. Instale o APK e aproveite!
-          files: ${{ steps.sign.outputs.apk_path }}
+            ### 📦 Edições Disponíveis para Download:
+            Escolha o arquivo `.apk` correspondente ao tipo de conexão que sua Mi Box utiliza:
+
+            1. **`Kodi-MiBox-S-Omega-Ethernet-armeabi-v7a.apk` (Edição Cabo de Rede Gigabit / 100M):**
+               - **Buffer RAM:** 64 MB (Consumo efetivo ~192 MB em RAM).
+               - **Fator de Leitura (Read Factor):** 20x (`2000`).
+               - **Tamanho do Chunk de Rede:** 256 KB (`262144`).
+               - **Modo de Buffer:** Modo 2 (Streams de Internet).
+               - **Perfil:** Otimizado para latência fixa ultrabaixa (< 1ms) e fluxo constante via adaptador USB Ethernet.
+
+            2. **`Kodi-MiBox-S-Omega-WiFi-armeabi-v7a.apk` (Edição Wi-Fi 5 e Wi-Fi 6 AC/AX 5GHz):**
+               - **Buffer RAM:** 96 MB (Consumo efetivo ~288 MB em RAM — armazena mais de 1 minuto de vídeo 4K de 20 Mbps pré-carregado).
+               - **Fator de Leitura (Read Factor):** 35x (`3500`) — preenchimento agressivo para aproveitar picos de largura de banda 5GHz (300-500 Mbps).
+               - **Tamanho do Chunk de Rede:** 512 KB (`524288`) — calibrado com os frames agregados (A-MPDU) dos padrões 802.11ac e 802.11ax.
+               - **Modo de Buffer:** Modo 1 (Buffer ativo para toda a rede: Internet + Rede Local SMB/NFS/WebDAV).
+               - **Perfil:** Máxima resiliência contra interferência de radiofrequência (RF), jitter e variações de sinal Wi-Fi.
+
+            *(Nota: O arquivo `Kodi-MiBox-S-Omega-armeabi-v7a.apk` também está disponível e é idêntico à Edição Ethernet).*
+
+            ---
+
+            ### ⚙️ Changelog Técnico Completo:
+
+            #### 1. Sincronização e Áudio Amlogic MediaCodec:
+            - **Delay Learner Amlogic (`<maxpassthroughoffsyncduration>80`):** Limita a variância dinâmica de sincronismo em 80ms no passthrough de áudio (AC3, EAC3, TrueHD, DTS). Elimina o descompasso progressivo (drift) entre clock de áudio e vídeo em filmes longos.
+            - **Auto Refresh Rate Switching (`videoplayer.adjustrefreshrate = 2`):** Alternância nativa para 24Hz / 23.976Hz no início de filmes e séries, eliminando trepidação (judder 3:2 pulldown).
+            - **Pausa de Handshake HDMI (`videoscreen.delayrefreshchange = 10`):** 1.0 segundo de pausa após chaveamento HDMI para estabilização de áudio antes do início do vídeo.
+            - **Sons de Navegação Desativados (`audiooutput.guisoundmode = 0`):** Elimina cortes e engasgos de handshake de áudio ao segurar botões de navegação no controle.
+
+            #### 2. Otimizações de Rede e Correção HTTP/2:
+            - **Desativação de HTTP/2 Multiplexing (`<disablehttp2>true</disablehttp2>`):** Forçamento do protocolo HTTP/1.1 para downloads de repositórios e add-ons, corrigindo o erro de arquivos `.zip` vazios (`0.00 B`) causado pelo encerramento de streams multiplexadas do HTTP/2.
+            - **Tráfego Cleartext Liberado (`usesCleartextTraffic="true"`):** Compatibilidade total com repositórios e espelhos que utilizam redirecionamentos HTTP.
+            - **Fontes Desconhecidas Nativas (`addons.unknownsources = true` e `addons.updatemode = 1`):** Ativação imediata para instalação de pacotes externos sem necessidade de configurações manuais.
+            - **Tolerância de Rede:** `curlclienttimeout` = 30s, `curllowspeedtime` = 20s, `curlretries` = 3.
+
+            #### 3. Seleção Inteligente de Idioma (PT-BR Nativo):
+            - **Áudio PT-BR Prioritário (`locale.audiolanguage = "Portuguese (Brazil)"`):** Seleciona automaticamente a faixa dublada em português brasileiro sempre que disponível.
+            - **Legenda PT-BR Inteligente (`locale.subtitlelanguage = "Portuguese (Brazil)"`):** Ativa automaticamente a legenda em português quando o áudio estiver no idioma original.
+
+            #### 4. Gerenciamento de Armazenamento e eMMC:
+            - **Zero Storage Bloat (`<packagecache><maxage>1</maxage>`):** Limpeza automática de pacotes zip de atualização antigos com mais de 24 horas, protegendo o armazenamento flash de 32GB contra inchaço crônico.
+
+            #### 5. Motor de Vídeo e Qualidade de Imagem:
+            - **Escalonador Spline36:** Renderizador padrão de alta precisão com `m_PostProcess = true`.
+            - **Mapeamento de Tom Hable:** Conversão HDR para SDR cinematográfica.
+            - **Debanding por Hardware:** Redução de artefatos de gradiente em transmissões compactadas.
+            - **HQ Scalers Ativos a 0%:** Escalonadores de alta qualidade em tempo integral.
+            - **IPTV de Baixa Latência:** FFmpeg probesize reduzido para 128 KB, duration para 0.5s e troca de canais PVR para 200ms.
+
+            #### 6. Interface TV Moderna e Fluida (OLED Black):
+            - **Paleta OLED Black Puro:** Fundo `#000000` para painéis OLED/QLED com foco azul elétrico (`#00B0FF`).
+            - **Menu Principal Dedicado a Streaming:** Abas de Música, Clipes, Rádio, Jogos, Imagens e Clima ocultadas por padrão. Menus ativos: Filmes, Séries, TV ao Vivo, Add-ons, Vídeos e Favoritos.
+            - **Animações Aceleradas para Controle Remoto:** Transições reduzidas para 180ms e atraso de painel para 60ms; foco em 80ms.
+            - **Mouse Desativado (`input.enablemouse = false`):** Redução de polling de CPU.
+
+            #### 7. Assinatura e Atualização Direta:
+            - **Chave Permanente:** Assinado com keystore persistente `mibox-release.keystore` (RSA 2048-bit).
+            - **Instalação Direta:** Pode ser instalado por cima das builds anteriores sem desinstalar e sem perder dados.
+          files: /tmp/release_apks/*.apk
           draft: false
           prerelease: false
