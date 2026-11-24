@@ -15,7 +15,7 @@
 CVideoSettings::CVideoSettings()
 {
   m_InterlaceMethod = VS_INTERLACEMETHOD_AUTO;
-  m_ScalingMethod = VS_SCALINGMETHOD_LINEAR;
+  m_ScalingMethod = VS_SCALINGMETHOD_SPLINE36;
   m_ViewMode = ViewModeNormal;
   m_CustomZoomAmount = 1.0f;
   m_CustomPixelRatio = 1.0f;
@@ -32,14 +32,14 @@ CVideoSettings::CVideoSettings()
   m_Gamma = 20.0f;
   m_Sharpness = 0.0f;
   m_NoiseReduction = 0;
-  m_PostProcess = false;
+  m_PostProcess = true;
   m_VolumeAmplification = 0;
   m_AudioDelay = 0.0f;
   m_ResumeTime = 0;
   m_StereoMode = 0;
   m_StereoInvert = false;
   m_VideoStream = -1;
-  m_ToneMapMethod = VS_TONEMAPMETHOD_REINHARD;
+  m_ToneMapMethod = VS_TONEMAPMETHOD_HABLE;
   m_ToneMapParam = 1.0f;
   m_Orientation = 0;
   m_CenterMixLevel = 0;

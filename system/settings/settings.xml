@@ -113,7 +113,7 @@
         </setting>
         <setting id="videoplayer.hqscalers" type="integer" parent="videoplayer.rendermethod" label="13435" help="36154">
           <level>2</level>
-          <default>20</default>
+          <default>0</default>
           <constraints>
             <minimum>0</minimum>
             <step>10</step>
@@ -3216,7 +3216,7 @@
       <group id="2" label="15108">
         <setting id="audiooutput.guisoundmode" type="integer" label="34120" help="36373">
           <level>0</level>
-          <default>1</default> <!-- AE_SOUND_IDLE -->
+          <default>0</default> <!-- AE_SOUND_OFF -->
           <constraints>
             <options>
               <option label="34121">1</option> <!-- AE_SOUND_IDLE -->

@@ -313,30 +313,36 @@ jobs:
 
           echo "✅ CMake build files generated in $BUILD_DIR"
 
-      - name: Create signing keystore
+      - name: Setup permanent signing keystore
         run: |
           set -euo pipefail
           mkdir -p ~/.android
-          keytool -genkey -v \
-            -keystore ~/.android/kodi.keystore \
-            -alias kodi \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Kodi MiBox, OU=CI, O=GitHub Actions, L=Cloud, ST=Cloud, C=BR" \
-            > /dev/null 2>&1
+          KEYSTORE_FILE="${{ github.workspace }}/tools/android/packaging/mibox-release.keystore"
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            echo "🔑 Generating new permanent release keystore..."
+            keytool -genkey -v \
+              -keystore "$KEYSTORE_FILE" \
+              -alias mibox \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Kodi MiBox S, OU=Release, O=Gustavo14832, L=Brazil, ST=Brazil, C=BR" \
+              > /dev/null 2>&1
 
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            > /dev/null 2>&1
-          echo "✅ Signing keystore created"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "$KEYSTORE_FILE"
+            git commit -m "ci: persist permanent release keystore for future updates"
+            git push origin Omega || true
+            echo "✅ Permanent keystore saved and committed to repository!"
+          else
+            echo "✅ Using existing permanent release keystore from repository"
+          fi
+
+          cp -f "$KEYSTORE_FILE" ~/.android/kodi.keystore
+          cp -f "$KEYSTORE_FILE" ~/.android/debug.keystore
+          echo "✅ Keystores installed"
 
       - name: Build Kodi
         run: |
@@ -386,7 +392,7 @@ jobs:
           "$BUILD_TOOLS/zipalign" -v 4 "$APK" "$ALIGNED"
           "$BUILD_TOOLS/apksigner" sign \
             --ks ~/.android/kodi.keystore \
-            --ks-key-alias kodi \
+            --ks-key-alias mibox \
             --ks-pass pass:android \
             --key-pass pass:android \
             --out "$OUT" \
