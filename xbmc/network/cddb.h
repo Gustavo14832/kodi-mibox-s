@@ -15,7 +15,11 @@
 #ifndef TARGET_POSIX
 #include <strstream>
 #endif
+#if defined(HAS_OPTICAL_DRIVE)
 #include "storage/cdioSupport.h"
+#else
+namespace MEDIA_DETECT { class CCdInfo; }
+#endif
 
 #include "utils/ScopeGuard.h"
 

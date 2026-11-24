@@ -26,7 +26,9 @@
 #include "platform/posix/filesystem/SMBFile.h"
 #endif
 #endif
+#if defined(HAS_OPTICAL_DRIVE)
 #include "CDDAFile.h"
+#endif
 #if defined(HAS_ISO9660PP)
 #include "ISO9660File.h"
 #endif

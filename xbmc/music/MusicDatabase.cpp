@@ -44,7 +44,9 @@
 #include "music/MusicLibraryQueue.h"
 #include "music/tags/MusicInfoTag.h"
 #include "network/Network.h"
+#if defined(HAS_OPTICAL_DRIVE)
 #include "network/cddb.h"
+#endif
 #include "playlists/SmartPlayList.h"
 #include "profiles/ProfileManager.h"
 #include "settings/AdvancedSettings.h"

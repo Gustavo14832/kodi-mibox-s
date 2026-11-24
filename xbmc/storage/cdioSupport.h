@@ -24,7 +24,9 @@
 
 #include "PlatformDefs.h" // for ssize_t typedef, used by cdio
 
+#if defined(HAS_OPTICAL_DRIVE)
 #include <cdio/cdio.h>
+#endif
 
 namespace MEDIA_DETECT
 {

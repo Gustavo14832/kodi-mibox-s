@@ -10,7 +10,9 @@
 
 #include "MusicInfoTag.h"
 #include "ServiceBroker.h"
+#if defined(HAS_OPTICAL_DRIVE)
 #include "network/cddb.h"
+#endif
 #include "profiles/ProfileManager.h"
 #include "settings/SettingsComponent.h"
 #include "storage/MediaManager.h"
