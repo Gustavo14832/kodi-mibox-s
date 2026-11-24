@@ -10,6 +10,7 @@
   <packagecache>
     <maxage>1</maxage>
   </packagecache>
+  <packagefoldersize>20</packagefoldersize>
 
   <!-- Aproveitamento da memória flash eMMC 5.2 de 32 GB para capas e miniaturas em alta fidelidade -->
   <fanartres>1080</fanartres>
@@ -17,10 +18,12 @@
 
   <!-- Otimizações de rede e estabilidade de socket para evitar erro 410 e quedas de CDN -->
   <network>
-    <curlclienttimeout>30</curlclienttimeout>
-    <curllowspeedtime>20</curllowspeedtime>
-    <curlretries>3</curlretries>
+    <curlclienttimeout>10</curlclienttimeout>
+    <curllowspeedtime>10</curllowspeedtime>
+    <curlretries>2</curlretries>
+    <curlkeepaliveinterval>15</curlkeepaliveinterval>
     <disablehttp2>true</disablehttp2>
+    <disableipv6>true</disableipv6>
   </network>
 
   <!-- Filtro de debanding por hardware para suavização de streams e IPTV compactado -->

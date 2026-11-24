@@ -470,9 +470,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mibox-s-build-${{ github.run_number }}
-          name: "Kodi 21.3.3 Omega MiBox S (Build #${{ github.run_number }})"
+          name: "Kodi 21.3.4 Omega MiBox S (Build #${{ github.run_number }})"
           body: |
-            ## 🚀 Kodi 21.3.3 (Omega) - Xiaomi TV Box S Custom Build
+            ## 🚀 Kodi 21.3.4 (Omega) - Xiaomi TV Box S Custom Build
 
             Build de alta performance desenvolvida sob medida para a **Xiaomi TV Box S (3ª Geração)** (SoC Amlogic S905X5M / S905X4, Quad-Core Cortex-A55 @ 2.5GHz, GPU Mali-G310 V2, 2GB RAM, 32GB eMMC, Android 14 Google TV, target `armeabi-v7a`).
 
@@ -493,49 +493,32 @@ jobs:
                - **Fator de Leitura (Read Factor):** 35x (`3500`) — preenchimento agressivo para aproveitar picos de largura de banda 5GHz (300-500 Mbps).
                - **Tamanho do Chunk de Rede:** 512 KB (`524288`) — calibrado com os frames agregados (A-MPDU) dos padrões 802.11ac e 802.11ax.
                - **Modo de Buffer:** Modo 1 (Buffer ativo para toda a rede: Internet + Rede Local SMB/NFS/WebDAV).
-               - **Perfil:** Máxima resiliência contra interferência de radiofrequência (RF), jitter e variações de sinal Wi-Fi.
+               - **Perfil:** Máxima resiliência contra interferência de RF, jitter e variações de sinal Wi-Fi.
 
             *(Nota: O arquivo `Kodi-MiBox-S-Omega-armeabi-v7a.apk` também está disponível e é idêntico à Edição Ethernet).*
 
             ---
 
-            ### ⚙️ Changelog Técnico Completo:
+            ### ⚙️ Novidades Desta Versão (Build #${{ github.run_number }}):
 
-            #### 1. Sincronização e Áudio Amlogic MediaCodec:
-            - **Delay Learner Amlogic (`<maxpassthroughoffsyncduration>80`):** Limita a variância dinâmica de sincronismo em 80ms no passthrough de áudio (AC3, EAC3, TrueHD, DTS). Elimina o descompasso progressivo (drift) entre clock de áudio e vídeo em filmes longos.
-            - **Auto Refresh Rate Switching (`videoplayer.adjustrefreshrate = 2`):** Alternância nativa para 24Hz / 23.976Hz no início de filmes e séries, eliminando trepidação (judder 3:2 pulldown).
-            - **Pausa de Handshake HDMI (`videoscreen.delayrefreshchange = 10`):** 1.0 segundo de pausa após chaveamento HDMI para estabilização de áudio antes do início do vídeo.
-            - **Sons de Navegação Desativados (`audiooutput.guisoundmode = 0`):** Elimina cortes e engasgos de handshake de áudio ao segurar botões de navegação no controle.
+            #### 1. 📺 Add-ons Instalados na Tela Inicial por Padrão (Acesso 1-Click Direto):
+            - **Carrossel de Add-ons na Tela Inicial (`Home.xml`):** Os widgets de Add-ons de Vídeo (`addons://sources/video/`) e Add-ons de Programas (`addons://sources/executable/`) agora são renderizados diretamente na tela principal do Kodi.
+            - **Supressão do Aviso de Biblioteca Vazia:** A mensagem genérica de biblioteca vazia é suprimida automaticamente assim que qualquer add-on de streaming estiver instalado, dando lugar imediato aos ícones dos seus add-ons.
+            - **Visibilidade Total Sem Cortes (`widget_limit = 100`):** O limite padrão de 15 itens foi expandido para 100 em todos os widgets de add-ons, garantindo que todas as extensões instaladas apareçam na tela.
+            - **Reordenação Prioritária na Seção de Add-ons:** Na aba de Add-ons, os Add-ons de Vídeo, Programas e Aplicativos Android foram promovidos para o topo da lista, ficando acima das categorias de repositório.
 
-            #### 2. Otimizações de Rede e Correção HTTP/2:
-            - **Desativação de HTTP/2 Multiplexing (`<disablehttp2>true</disablehttp2>`):** Forçamento do protocolo HTTP/1.1 para downloads de repositórios e add-ons, corrigindo o erro de arquivos `.zip` vazios (`0.00 B`) causado pelo encerramento de streams multiplexadas do HTTP/2.
-            - **Tráfego Cleartext Liberado (`usesCleartextTraffic="true"`):** Compatibilidade total com repositórios e espelhos que utilizam redirecionamentos HTTP.
-            - **Fontes Desconhecidas Nativas (`addons.unknownsources = true` e `addons.updatemode = 1`):** Ativação imediata para instalação de pacotes externos sem necessidade de configurações manuais.
-            - **Tolerância de Rede:** `curlclienttimeout` = 30s, `curllowspeedtime` = 20s, `curlretries` = 3.
+            #### 2. ⚡ Otimizações Globais de Rede para Add-ons (Cura para atrasos e Erro 410):
+            - **Forçamento de Resolução IPv4 (`<disableipv6>true</disableipv6>`):** Desativa tentativas de resolução DNS e conexões IPv6 nos módulos cURL do Kodi. Elimina atrasos de 20 a 45 segundos para iniciar filmes e canais ao vivo decorrentes de rotas IPv6 problemáticas em operadoras de banda larga.
+            - **Timeouts Rápidos de Scraper e Conexão:** `curlclienttimeout` = 10s e `curllowspeedtime` = 10s para garantir failover rápido caso uma fonte ou link demore para responder, sem congelar o player.
+            - **Keep-Alive Otimizado (`curlkeepaliveinterval = 15`):** Mantém conexões TCP persistentes abertas com CDNs e servidores de streaming.
+            - **Controle de Inchaço de Pacotes (`<packagefoldersize>20</packagefoldersize>`):** Impede acúmulo excessivo de arquivos residuais no armazenamento interno flash de 32GB da Mi Box.
 
-            #### 3. Seleção Inteligente de Idioma (PT-BR Nativo):
-            - **Áudio PT-BR Prioritário (`locale.audiolanguage = "Portuguese (Brazil)"`):** Seleciona automaticamente a faixa dublada em português brasileiro sempre que disponível.
-            - **Legenda PT-BR Inteligente (`locale.subtitlelanguage = "Portuguese (Brazil)"`):** Ativa automaticamente a legenda em português quando o áudio estiver no idioma original.
+            #### 3. 🛠️ Backports Oficiais do Kodi v22 Piers (Versão Beta / Upstream):
+            - **AudioEngine Flush Fix (PR #30106 / Issue #29470):** Implementado descarte imediato de buffers residuais e frames desatualizados em `AESinkAUDIOTRACK` durante saltos no vídeo (seeks/avanços). Elimina o descompasso progressivo entre áudio e vídeo e engasgos em passthrough.
+            - **MediaCodec SPS/PPS Reconfigure Fix (PR #30453 / Issue #30448):** Corrigido o método `CDVDVideoCodecAndroidMediaCodec::Reconfigure` para reconfigurar os decodificadores de hardware MediaCodec sempre que houver variação de SPS/PPS (extradata) no fluxo de vídeo, corrigindo congelamentos com tela preta ao trocar de canal ou episódio.
 
-            #### 4. Gerenciamento de Armazenamento e eMMC:
-            - **Zero Storage Bloat (`<packagecache><maxage>1</maxage>`):** Limpeza automática de pacotes zip de atualização antigos com mais de 24 horas, protegendo o armazenamento flash de 32GB contra inchaço crônico.
-
-            #### 5. Motor de Vídeo e Qualidade de Imagem:
-            - **Escalonador Spline36:** Renderizador padrão de alta precisão com `m_PostProcess = true`.
-            - **Mapeamento de Tom Hable:** Conversão HDR para SDR cinematográfica.
-            - **Debanding por Hardware:** Redução de artefatos de gradiente em transmissões compactadas.
-            - **HQ Scalers Ativos a 0%:** Escalonadores de alta qualidade em tempo integral.
-            - **IPTV de Baixa Latência:** FFmpeg probesize reduzido para 128 KB, duration para 0.5s e troca de canais PVR para 200ms.
-
-            #### 6. Interface TV Moderna e Fluida (OLED Black):
-            - **Paleta OLED Black Puro:** Fundo `#000000` para painéis OLED/QLED com foco azul elétrico (`#00B0FF`).
-            - **Menu Principal Dedicado a Streaming:** Abas de Música, Clipes, Rádio, Jogos, Imagens e Clima ocultadas por padrão. Menus ativos: Filmes, Séries, TV ao Vivo, Add-ons, Vídeos e Favoritos.
-            - **Animações Aceleradas para Controle Remoto:** Transições reduzidas para 180ms e atraso de painel para 60ms; foco em 80ms.
-            - **Mouse Desativado (`input.enablemouse = false`):** Redução de polling de CPU.
-
-            #### 7. Assinatura e Atualização Direta:
-            - **Chave Permanente:** Assinado com keystore persistente `mibox-release.keystore` (RSA 2048-bit).
-            - **Instalação Direta:** Pode ser instalado por cima das builds anteriores sem desinstalar e sem perder dados.
+            #### 4. 🔑 Atualização Direta:
+            - **Mesma Chave Criptográfica:** Assinado com a chave persistente `mibox-release.keystore`. Permite instalação como atualização direta por cima da build anterior, preservando todas as configurações e add-ons já instalados.
           files: /tmp/release_apks/*.apk
           draft: false
           prerelease: false
