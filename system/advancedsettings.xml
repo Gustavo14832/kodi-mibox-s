@@ -1,0 +1,28 @@
+<advancedsettings version="1.0">
+  <!-- Otimizações exclusivas para Xiaomi TV Box S (3rd Gen) - Amlogic S905X5M / Mali-G310 V2 -->
+  <gui>
+    <!-- Sincronia de buffer sem screen tearing ou flickering na GPU Mali -->
+    <algorithmdirtyregions>3</algorithmdirtyregions>
+  </gui>
+
+  <!-- Aproveitamento da memória flash eMMC 5.2 de 32 GB para capas e miniaturas em alta fidelidade -->
+  <fanartres>1080</fanartres>
+  <imageres>720</imageres>
+
+  <!-- Otimizações de rede e estabilidade de socket para Ethernet Gigabit USB 2.0 -->
+  <network>
+    <curlclienttimeout>10</curlclienttimeout>
+    <curllowspeedtime>5</curllowspeedtime>
+    <curlretries>2</curlretries>
+  </network>
+
+  <!-- Filtro de debanding por hardware para suavização de streams e IPTV compactado -->
+  <video>
+    <deband>true</deband>
+  </video>
+
+  <!-- Troca rápida de canal ao vivo (PVR / IPTV) -->
+  <pvr>
+    <numericchannelswitchtimeout>500</numericchannelswitchtimeout>
+  </pvr>
+</advancedsettings>

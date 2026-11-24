@@ -494,6 +494,14 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
       av_dict_set_int(&options, "sample_rate", samplerate, 0);
     }
 
+    if (m_ioContext && m_ioContext->seekable == 0)
+    {
+      CLog::Log(LOGDEBUG, "{} - live stream detected, applying low-latency probesize & analyzeduration", __FUNCTION__);
+      av_dict_set(&options, "probesize", "131072", 0);
+      av_dict_set(&options, "analyzeduration", "500000", 0);
+      av_dict_set(&options, "fflags", "nobuffer+fastseek", 0);
+    }
+
     if (avformat_open_input(&m_pFormatContext, strFile.c_str(), iformat, &options) < 0)
     {
       CLog::Log(LOGERROR, "{} - Error, could not open file {}", __FUNCTION__,
@@ -593,6 +601,8 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
 
   // if format can be nonblocking, let's use that
   m_pFormatContext->flags |= AVFMT_FLAG_NONBLOCK;
+  if (m_ioContext && m_ioContext->seekable == 0)
+    m_pFormatContext->flags |= AVFMT_FLAG_NOBUFFER;
 
   // select the correct program if requested
   m_initialProgramNumber = UINT_MAX;
