@@ -1,0 +1,430 @@
+name: Build Kodi MiBox APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      abi:
+        description: 'Target architecture'
+        required: true
+        default: 'arm64-v8a'
+        type: choice
+        options:
+          - arm64-v8a
+          - armeabi-v7a
+      app_name:
+        description: 'App display name'
+        required: true
+        default: 'Kodi MiBox'
+      package_id:
+        description: 'Android package ID'
+        required: true
+        default: 'org.xbmc.kodi'
+      apk_filename:
+        description: 'APK file name (without .apk)'
+        required: false
+        default: 'Kodi-MiBox-S-Omega'
+      unknown_sources:
+        description: 'Pre-enable Unknown sources'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      create_release:
+        description: 'Publish as GitHub Release'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  build:
+    name: Build APK (${{ github.event.inputs.abi || 'arm64-v8a' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Parse ABI selection
+        id: abi
+        run: |
+          RAW="${{ github.event.inputs.abi || 'arm64-v8a' }}"
+          ABI="${RAW%% *}"
+          echo "value=$ABI" >> $GITHUB_OUTPUT
+          case "$ABI" in
+            arm64-v8a)
+              echo "triplet=aarch64-linux-android"   >> $GITHUB_OUTPUT
+              echo "target_dir=aarch64-linux-android-24-release" >> $GITHUB_OUTPUT ;;
+            armeabi-v7a)
+              echo "triplet=arm-linux-androideabi"   >> $GITHUB_OUTPUT
+              echo "target_dir=arm-linux-androideabi-24-release" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Resolve Kodi build profile
+        id: kodi
+        run: |
+          set -euo pipefail
+          RELEASE="Omega"
+          SOURCE_REF="Omega"
+          ADDON_CHANNEL="omega"
+          ANDROID_PLATFORM=34
+          ANDROID_BUILD_TOOLS=34.0.0
+          {
+            echo "release=$RELEASE"
+            echo "source_ref=$SOURCE_REF"
+            echo "addon_channel=$ADDON_CHANNEL"
+            echo "android_platform=$ANDROID_PLATFORM"
+            echo "android_build_tools=$ANDROID_BUILD_TOOLS"
+            echo "is_prerelease=false"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building Kodi Omega for Android ($ANDROID_PLATFORM / $ANDROID_BUILD_TOOLS)"
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ninja-build make nasm python3 \
+            curl unzip zip openjdk-17-jdk-headless \
+            autoconf libtool pkg-config yasm ccache \
+            libgl1-mesa-dev libgles2-mesa-dev \
+            gperf default-jre imagemagick cmake
+          cmake --version
+          echo "✅ System packages installed"
+
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        id: ndk-cache
+        with:
+          path: ~/android-ndk-r28c
+          key: ndk-r28c-linux
+
+      - name: Download Android NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "⬇️ Downloading NDK r28c..."
+          curl -fsSL https://dl.google.com/android/repository/android-ndk-r28c-linux.zip \
+            -o /tmp/ndk.zip
+          unzip -q /tmp/ndk.zip -d ~/
+          rm /tmp/ndk.zip
+          echo "✅ NDK ready"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: Setup Kodi source
+        id: source
+        run: |
+          set -euo pipefail
+          echo "📦 Copying workspace to ~/kodi..."
+          cp -r "${{ github.workspace }}" ~/kodi
+          SOURCE_SHA=$(git -C ~/kodi rev-parse HEAD)
+          DEPENDS_FINGERPRINT=$(git -C ~/kodi ls-tree -r HEAD tools/depends | sha256sum | cut -d' ' -f1)
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "depends_fingerprint=$DEPENDS_FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "✅ Source ready (${SOURCE_SHA:0:12})"
+
+      - name: Patch Android looper API for newer NDK
+        run: |
+          set -euo pipefail
+          mapfile -t LOOPER_FILES < <(grep -RIl "ALooper_pollAll(" ~/kodi/xbmc/platform/android || true)
+          if [ ${#LOOPER_FILES[@]} -gt 0 ]; then
+            for f in "${LOOPER_FILES[@]}"; do
+              sed -i 's/ALooper_pollAll(/ALooper_pollOnce(/g' "$f"
+            done
+            echo "✅ Patched ALooper_pollAll -> ALooper_pollOnce"
+          fi
+
+      - name: Patch optical & CDDB includes
+        run: |
+          set -euo pipefail
+          FILE=~/kodi/xbmc/filesystem/FileFactory.cpp
+          if [ -f "$FILE" ]; then
+            sed -i 's@#include "CDDAFile.h"@#if defined(HAS_OPTICAL_DRIVE)\n#include "CDDAFile.h"\n#endif@' "$FILE"
+          fi
+          MUSIC_DB=~/kodi/xbmc/music/MusicDatabase.cpp
+          if [ -f "$MUSIC_DB" ]; then
+            sed -i 's@#include "network/cddb.h"@#if defined(HAS_OPTICAL_DRIVE)\n#include "network/cddb.h"\n#endif@' "$MUSIC_DB"
+          fi
+
+      - name: Pre-enable Unknown Sources in Settings
+        run: |
+          UNKNOWN="${{ github.event.inputs.unknown_sources || 'true' }}"
+          if [ "$UNKNOWN" = "true" ]; then
+            SETTINGS_XML=~/kodi/system/settings/settings.xml
+            sed -i '/<setting id="addons.unknownsources"/,/<\/setting>/ s|<default>false</default>|<default>true</default>|' "$SETTINGS_XML"
+            sed -i '/<setting id="addons.updatemode"/,/<\/setting>/ s|<default>0</default>|<default>1</default>|' "$SETTINGS_XML"
+            echo "✅ Unknown sources enabled"
+          fi
+
+      - name: Cache source tarballs
+        uses: actions/cache@v4
+        with:
+          path: ~/kodi-tarballs
+          key: kodi-tarballs-omega-v1
+
+      - name: Cache Kodi depends
+        id: depends-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/kodi-depends
+          key: kodi-depends-omega-${{ steps.source.outputs.depends_fingerprint }}-${{ steps.abi.outputs.value }}-v1
+
+      - name: Configure and build Kodi depends
+        run: |
+          set -euo pipefail
+          DEPENDS_DIR=$HOME/kodi/tools/depends
+          DEPENDS_PREFIX=$HOME/kodi-depends
+          TARBALLS=$HOME/kodi-tarballs
+          NDK=$HOME/android-ndk-r28c
+          HOST=${{ steps.abi.outputs.triplet }}
+          SYS_CMAKE=$(which cmake)
+          NATIVE_BIN="$DEPENDS_PREFIX/x86_64-linux-gnu-native/bin"
+          TARGET_DIR="${{ steps.abi.outputs.target_dir }}"
+
+          mkdir -p "$TARBALLS"
+
+          if [ "${{ steps.depends-cache.outputs.cache-hit }}" = "true" ] && \
+             [ -d "$DEPENDS_PREFIX/$TARGET_DIR/lib" ] && \
+             [ "$(ls -A $DEPENDS_PREFIX/$TARGET_DIR/lib 2>/dev/null)" ]; then
+            echo "✅ Valid cached depends found"
+          else
+            echo "📦 Bootstrapping depends..."
+            cd "$DEPENDS_DIR"
+            ./bootstrap
+            sed -i "s|CMAKE=@prefix@/@tool_dir@/bin/cmake|CMAKE=$SYS_CMAKE|g" Makefile.include.in
+
+            grep -v '^	cmake$' native/Makefile | \
+              sed 's/ cmake / /g; s/ cmake$//; s/cmake \\//' > native/Makefile.tmp
+            mv native/Makefile.tmp native/Makefile
+
+            mkdir -p "$NATIVE_BIN"
+            cp -f "$SYS_CMAKE" "$NATIVE_BIN/cmake"
+            chmod +x "$NATIVE_BIN/cmake"
+            mkdir -p "$DEPENDS_DIR/native/cmake"
+            touch "$DEPENDS_DIR/native/cmake/.installed-x86_64-linux-native"
+
+            echo "⚙️ Configuring depends..."
+            ./configure \
+              --host="$HOST" \
+              --with-sdk-path="$ANDROID_HOME" \
+              --with-ndk-path="$NDK" \
+              --with-ndk-api=24 \
+              --with-tarballs="$TARBALLS" \
+              --prefix="$DEPENDS_PREFIX" \
+              --disable-gplv3 \
+              --enable-debug=no
+
+            SKIP_PKGS="samba-gplv3 samba libcdio-gplv3 libcdio libcec lirc"
+            SKIP_PKGS="$SKIP_PKGS libdvdcss libdvdread libdvdnav"
+            SKIP_PKGS="$SKIP_PKGS dbus libuuid alsa-lib libdrm"
+            SKIP_PKGS="$SKIP_PKGS libxkbcommon libinput libudev libevdev mtdev"
+            SKIP_PKGS="$SKIP_PKGS wayland waylandpp wayland-protocols gnutls libmicrohttpd"
+            for pkg in $SKIP_PKGS; do
+              sed -i "/^${pkg}:/,/^[^	]/{/^${pkg}:/d;/^	/d}" target/Makefile
+              sed -i "s/+=${pkg}$/+=/g; s/+=${pkg} /+=/g" target/Makefile
+              sed -i "s/ ${pkg} / /g; s/ ${pkg}$//; s/^${pkg} //" target/Makefile
+            done
+            sed -i '/^[[:space:]]*DEPENDS+=[[:space:]]*$/d' target/Makefile
+
+            mkdir -p "$NATIVE_BIN"
+            ln -sf "$SYS_CMAKE" "$NATIVE_BIN/cmake"
+
+            export RUSTUP_HOME="$DEPENDS_PREFIX/x86_64-linux-gnu-native/.rustup"
+            export CARGO_HOME="$DEPENDS_PREFIX/x86_64-linux-gnu-native/.cargo"
+
+            echo "🔨 Compiling depends..."
+            make -j$(nproc)
+            echo "✅ Depends built successfully"
+          fi
+
+          mkdir -p "$NATIVE_BIN"
+          ln -sf "$SYS_CMAKE" "$NATIVE_BIN/cmake"
+
+          if [ ! -f "$DEPENDS_DIR/Makefile.include" ]; then
+            cd "$DEPENDS_DIR"
+            ./bootstrap
+            sed -i "s|CMAKE=@prefix@/@tool_dir@/bin/cmake|CMAKE=$SYS_CMAKE|g" Makefile.include.in
+            ./configure \
+              --host="$HOST" \
+              --with-sdk-path="$ANDROID_HOME" \
+              --with-ndk-path="$NDK" \
+              --with-ndk-api=24 \
+              --with-tarballs="$TARBALLS" \
+              --prefix="$DEPENDS_PREFIX" \
+              --disable-gplv3 \
+              --enable-debug=no
+          fi
+
+      - name: Generate CMake build files
+        run: |
+          set -euo pipefail
+          BUILD_DIR=$HOME/kodi-build
+          DEPENDS_PREFIX=$HOME/kodi-depends
+          NATIVE_BIN="$DEPENDS_PREFIX/x86_64-linux-gnu-native/bin"
+          SYS_CMAKE=$(which cmake)
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          export PATH="$NATIVE_BIN:$PATH"
+
+          cd $HOME/kodi
+          grep -rl "core_require_dep" . --include="*.cmake" --include="CMakeLists.txt" 2>/dev/null | \
+            xargs -r sed -i 's/core_require_dep(/core_optional_dep(/g'
+
+          if [ -f cmake/modules/FindLibZip.cmake ]; then
+            sed -i 's/find_package(GnuTLS MODULE REQUIRED)/find_package(GnuTLS MODULE QUIET)/' cmake/modules/FindLibZip.cmake
+            sed -i '/set(CMAKE_ARGS -DBUILD_DOC=OFF/a\                 -DENABLE_GNUTLS=OFF\n                 -DENABLE_OPENSSL=ON\n                 -DENABLE_MBEDTLS=OFF\n                 -DENABLE_WINDOWS_CRYPTO=OFF\n                 -DENABLE_COMMONCRYPTO=OFF' cmake/modules/FindLibZip.cmake
+          fi
+
+          KODI_CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_OPTICAL=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_MICROHTTPD=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_UPNP=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_DBUS=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_ALSA=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_UDEV=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_LIRC=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_CEC=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_PULSEAUDIO=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_PIPEWIRE=OFF"
+          KODI_CMAKE_ARGS="$KODI_CMAKE_ARGS -DENABLE_SMBCLIENT=OFF"
+
+          cd $HOME/kodi/tools/depends
+          make -C target/cmakebuildsys \
+            BUILD_DIR="$BUILD_DIR" \
+            CMAKE_SOURCE_DIR="$HOME/kodi" \
+            CMAKE_EXTRA_ARGUMENTS="$KODI_CMAKE_ARGS"
+
+          echo "✅ CMake build files generated in $BUILD_DIR"
+
+      - name: Create signing keystore
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.android
+          keytool -genkey -v \
+            -keystore ~/.android/kodi.keystore \
+            -alias kodi \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Kodi MiBox, OU=CI, O=GitHub Actions, L=Cloud, ST=Cloud, C=BR" \
+            > /dev/null 2>&1
+
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            > /dev/null 2>&1
+          echo "✅ Signing keystore created"
+
+      - name: Build Kodi
+        run: |
+          set -euo pipefail
+          BUILD_DIR=$HOME/kodi-build
+          echo "🏗️ Compiling Kodi binaries..."
+          make -C "$BUILD_DIR" -j$(nproc)
+          echo "✅ Kodi binaries compiled"
+
+      - name: Package APK
+        run: |
+          set -euo pipefail
+          BUILD_DIR=$HOME/kodi-build
+          KODI_SRC=$HOME/kodi
+          cd "$KODI_SRC"
+          echo "📦 Packaging APK..."
+          make -C "$BUILD_DIR" apk
+          echo "✅ APK packaged"
+
+      - name: Locate built APK
+        id: locate
+        run: |
+          APK=$(find ~ -name "*.apk" 2>/dev/null \
+            | grep -v ".gradle" \
+            | grep -v "/tmp/" \
+            | grep -v "aligned" \
+            | head -1)
+          if [ -z "$APK" ]; then
+            echo "❌ No APK found"
+            exit 1
+          fi
+          echo "✅ Found APK: $APK"
+          echo "apk_path=$APK" >> $GITHUB_OUTPUT
+
+      - name: Sign and zipalign APK
+        id: sign
+        run: |
+          APK="${{ steps.locate.outputs.apk_path }}"
+          CUSTOM="${{ github.event.inputs.apk_filename || 'Kodi-MiBox-S-Omega' }}"
+          SAFE_NAME=$(echo "$CUSTOM" | sed 's/\.apk$//i' | tr ' ' '_')
+          ABI="${{ steps.abi.outputs.value }}"
+          OUT_NAME="${SAFE_NAME}-${ABI}.apk"
+          OUT="/tmp/$OUT_NAME"
+          ALIGNED="/tmp/aligned.apk"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/34.0.0"
+
+          "$BUILD_TOOLS/zipalign" -v 4 "$APK" "$ALIGNED"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks ~/.android/kodi.keystore \
+            --ks-key-alias kodi \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$OUT" \
+            "$ALIGNED"
+
+          SIZE=$(du -sh "$OUT" | cut -f1)
+          echo "✅ Signed APK: $OUT_NAME ($SIZE)"
+          echo "apk_path=$OUT"      >> $GITHUB_OUTPUT
+          echo "apk_name=$OUT_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.sign.outputs.apk_name }}
+          path: ${{ steps.sign.outputs.apk_path }}
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event.inputs.create_release != 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mibox-s-build-${{ github.run_number }}
+          name: "Kodi 21 Omega MiBox S (Build #${{ github.run_number }})"
+          body: |
+            ## 🚀 Kodi 21 (Omega) - Xiaomi TV Box S Otimizado
+
+            Build customizada exclusivamente para a **Xiaomi TV Box S (Amlogic S905X4/S905X5M)**.
+
+            ### Otimizações Embutidas:
+            - **100% PT-BR:** Interface, teclado ABNT e legendas já em Português do Brasil na primeira inicialização.
+            - **Rede Gigabit USB:** Buffer RAM configurado para 64 MB com taxa de leitura acelerada em 20x.
+            - **Baixa Latência no Ao Vivo:** Sondagem FFmpeg reduzida para 128 KB e delay de live stream reduzido.
+            - **Fidelidade Visual:** Pipeline MediaCodec Surface puro e debanding por hardware.
+
+            ### Como Instalar:
+            1. Baixe o arquivo `.apk` abaixo.
+            2. Transfira para a sua Mi Box via pendrive ou app de transferência (ex: *Send Files to TV*).
+            3. Instale o APK e aproveite!
+          files: ${{ steps.sign.outputs.apk_path }}
+          draft: false
+          prerelease: false
