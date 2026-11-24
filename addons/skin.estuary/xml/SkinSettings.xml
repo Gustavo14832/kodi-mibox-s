@@ -198,8 +198,8 @@
 				<control type="radiobutton" id="613">
 					<label>$LOCALIZE[2]</label>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoMusicButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoMusicButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowMusicButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowMusicButton)</onclick>
 				</control>
 				<control type="button" id="6130">
 					<label>- $LOCALIZE[31157]</label>
@@ -207,20 +207,20 @@
 					<onclick condition="System.AddonIsEnabled(plugin.library.node.editor)">ActivateWindow(programs,plugin://plugin.library.node.editor/?ltype=music,return)</onclick>
 					<onclick condition="System.HasAddon(plugin.library.node.editor) + !System.AddonIsEnabled(plugin.library.node.editor)">EnableAddon(plugin.library.node.editor)</onclick>
 					<onclick condition="!System.HasAddon(plugin.library.node.editor)">InstallAddon(plugin.library.node.editor)</onclick>
-					<enable>!Skin.HasSetting(HomeMenuNoMusicButton)</enable>
+					<enable>Skin.HasSetting(HomeMenuShowMusicButton)</enable>
 				</control>
 				<control type="button" id="625">
 					<label>- $LOCALIZE[31174]</label>
 					<include>DefaultSettingButton</include>
 					<onclick>Skin.SelectBool(31174, 37015|album_onclick_browse, 208|album_onclick_play, 10008|album_onclick_playnext, 13347|album_onclick_queue)</onclick>
 					<label2>$VAR[AlbumOnClickActionLabel2Var]</label2>
-					<enable>!Skin.HasSetting(HomeMenuNoMusicButton)</enable>
+					<enable>Skin.HasSetting(HomeMenuShowMusicButton)</enable>
 				</control>
 				<control type="radiobutton" id="6131">
 					<label>$LOCALIZE[20389]</label>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoMusicVideoButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoMusicVideoButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowMusicVideoButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowMusicVideoButton)</onclick>
 				</control>
 				<control type="radiobutton" id="618">
 					<label>$LOCALIZE[19020]</label>
@@ -231,8 +231,8 @@
 				<control type="radiobutton" id="619">
 					<label>$LOCALIZE[19021]</label>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoRadioButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoRadioButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowRadioButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowRadioButton)</onclick>
 				</control>
 				<control type="radiobutton" id="614">
 					<label>$LOCALIZE[24001]</label>
@@ -243,8 +243,8 @@
 				<control type="radiobutton" id="615">
 					<label>$LOCALIZE[1]</label>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoPicturesButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoPicturesButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowPicturesButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowPicturesButton)</onclick>
 				</control>
 				<control type="radiobutton" id="616">
 					<label>$LOCALIZE[3]</label>
@@ -256,8 +256,8 @@
 					<label>$LOCALIZE[15016]</label>
 					<visible>System.GetBool(gamesgeneral.enable)</visible>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoGamesButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoGamesButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowGamesButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowGamesButton)</onclick>
 				</control>
 				<control type="radiobutton" id="6160">
 					<label>$LOCALIZE[10134]</label>
@@ -268,8 +268,8 @@
 				<control type="radiobutton" id="617">
 					<label>$LOCALIZE[8]</label>
 					<include>DefaultSettingButton</include>
-					<selected>!Skin.HasSetting(HomeMenuNoWeatherButton)</selected>
-					<onclick>Skin.ToggleSetting(HomeMenuNoWeatherButton)</onclick>
+					<selected>Skin.HasSetting(HomeMenuShowWeatherButton)</selected>
+					<onclick>Skin.ToggleSetting(HomeMenuShowWeatherButton)</onclick>
 				</control>
 			</control>
 			<control type="grouplist" id="622">
