@@ -707,6 +707,7 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
   const int64_t timestampAge = CurrentHostCounter() - m_timestamp.get_nanoTime();
   bool validTimestamp =
       m_timestamp.get_framePosition() > 0 && timestampAge < 2 * 1000 * 1000 * 1000;
+  const bool isRawPt = m_passthrough && !m_info.m_wantsIECPassthrough;
   if (isRawPt)
   {
     // A future presentation time cannot be extrapolated with an unsigned delta.
