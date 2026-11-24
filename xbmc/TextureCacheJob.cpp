@@ -25,6 +25,7 @@
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
@@ -124,7 +125,21 @@ bool CTextureCacheJob::CacheTexture(std::unique_ptr<CTexture>* out_texture)
     }
   }
 
-  std::unique_ptr<CTexture> texture = LoadImage(image, width, height, additional_info, true);
+  // CPicture::CacheTexture() caps textures at imageres/fanartres, so avoid decoding
+  // oversized 4K+ fanart/thumbs only to discard pixels immediately afterward.
+  unsigned int loadWidth = width;
+  unsigned int loadHeight = height;
+  if (loadWidth == 0 || loadHeight == 0)
+  {
+    const auto advancedSettings = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings();
+    const unsigned int maxHeight =
+        std::max(advancedSettings->m_imageRes, advancedSettings->m_fanartRes);
+    loadHeight = maxHeight;
+    loadWidth = maxHeight * 16 / 9;
+  }
+
+  std::unique_ptr<CTexture> texture =
+      LoadImage(image, loadWidth, loadHeight, additional_info, true);
   if (texture)
   {
     if (texture->HasAlpha())
@@ -164,7 +179,21 @@ bool CTextureCacheJob::ResizeTexture(const std::string &url, uint8_t* &result, s
   if (image.empty())
     return false;
 
-  std::unique_ptr<CTexture> texture = LoadImage(image, width, height, additional_info, true);
+  // CPicture::CacheTexture() caps textures at imageres/fanartres, so avoid decoding
+  // oversized 4K+ fanart/thumbs only to discard pixels immediately afterward.
+  unsigned int loadWidth = width;
+  unsigned int loadHeight = height;
+  if (loadWidth == 0 || loadHeight == 0)
+  {
+    const auto advancedSettings = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings();
+    const unsigned int maxHeight =
+        std::max(advancedSettings->m_imageRes, advancedSettings->m_fanartRes);
+    loadHeight = maxHeight;
+    loadWidth = maxHeight * 16 / 9;
+  }
+
+  std::unique_ptr<CTexture> texture =
+      LoadImage(image, loadWidth, loadHeight, additional_info, true);
   if (texture == NULL)
     return false;
 

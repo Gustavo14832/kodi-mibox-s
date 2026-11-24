@@ -57,6 +57,8 @@ enum AdjustRefreshRate
   ADJUST_REFRESHRATE_ON_START,
 };
 
+class CEvent;
+
 class CGraphicContext : public CCriticalSection
 {
 public:
@@ -72,7 +74,12 @@ public:
   void SetFullScreenVideo(bool bOnOff);
   bool IsFullScreenVideo() const;
   bool IsValidResolution(RESOLUTION res);
-  void SetVideoResolution(RESOLUTION res, bool forceUpdate);
+  /*!
+   * \brief Switch the video resolution on the app thread
+   * \param abortEvent off the app thread, once set drop the switch and stop waiting, unless the
+   *        app thread has already started it, in which case wait for it to finish
+   */
+  void SetVideoResolution(RESOLUTION res, bool forceUpdate, CEvent* abortEvent = nullptr);
   void ApplyModeChange(RESOLUTION res);
   void ApplyWindowResize(int newWidth, int newHeight);
   RESOLUTION GetVideoResolution() const;

@@ -28,7 +28,7 @@
 			<animation effect="fade" start="100" end="0" time="300">WindowClose</animation>
 			<animation effect="fade" time="400">VisibleChange</animation>
 			<imagepath background="true" colordiffuse="bg_overlay">$VAR[HomeFanartVar]</imagepath>
-			<visible>!Player.HasMedia</visible>
+			<visible>false</visible>
 		</control>
 		<control type="group">
 			<animation effect="fade" start="100" end="0" time="200" tween="sine" condition="$EXP[infodialog_active]">Conditional</animation>
@@ -127,7 +127,7 @@
 						<param name="button_onclick" value="ActivateWindow(videos,files,return)"/>
 						<param name="button_id" value="5500"/>
 						<param name="button2_onclick" value="Skin.SetBool(HomeMenuNoMovieButton)"/>
-						<param name="visible" value="!Integer.IsGreater(Container(5080).NumItems,0)"/>
+						<param name="visible" value="!Integer.IsGreater(Container(5080).NumItems,0) + !Integer.IsGreater(Container(5090).NumItems,0)"/>
 					</include>
 					<include content="WidgetScrollbar" condition="Skin.HasSetting(touchmode)">
 						<param name="scrollbar_id" value="5010"/>
@@ -569,7 +569,7 @@
 						<onup>14100</onup>
 						<ondown>14100</ondown>
 						<preloaditems>2</preloaditems>
-						<scrolltime tween="cubic" easing="out">500</scrolltime>
+						<scrolltime tween="cubic" easing="out">150</scrolltime>
 						<orientation>vertical</orientation>
 						<pagecontrol>14010</pagecontrol>
 						<visible>Integer.IsGreater(Container(14100).NumItems,0) | Container(14100).IsUpdating</visible>
@@ -586,8 +586,8 @@
 							<control type="group">
 								<depth>DepthContentPopout</depth>
 								<top>130</top>
-								<animation effect="zoom" start="100" end="110" time="200" tween="sine" easing="inout" center="170,320">Focus</animation>
-								<animation effect="zoom" start="110" end="100" time="200" tween="sine" easing="inout" center="170,320">UnFocus</animation>
+								<animation effect="zoom" start="100" end="110" time="80" tween="sine" easing="inout" center="170,320">Focus</animation>
+								<animation effect="zoom" start="110" end="100" time="80" tween="sine" easing="inout" center="170,320">UnFocus</animation>
 								<include content="InfoWallMusicLayout">
 									<param name="fallback_image" value="DefaultFavourites.png" />
 									<param name="focused" value="true" />
@@ -893,7 +893,7 @@
 					<onright>SetFocus($INFO[Container(9000).ListItem.Property(menu_id)])</onright>
 					<onup>700</onup>
 					<ondown>700</ondown>
-					<scrolltime tween="cubic" easing="out">500</scrolltime>
+					<scrolltime tween="cubic" easing="out">140</scrolltime>
 					<focusedlayout height="95">
 						<control type="group">
 							<animation effect="fade" start="100" end="0" time="0">UnFocus</animation>
@@ -911,7 +911,7 @@
 								<width>95</width>
 								<height>95</height>
 								<texture colordiffuse="button_focus">$INFO[ListItem.Art(thumb)]</texture>
-								<animation effect="fade" start="0" end="100" time="300" reversible="false">Focus</animation>
+								<animation effect="fade" start="0" end="100" time="120" reversible="false">Focus</animation>
 							</control>
 							<control type="image">
 								<left>0</left>

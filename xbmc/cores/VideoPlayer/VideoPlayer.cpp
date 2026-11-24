@@ -80,6 +80,27 @@ using namespace std::chrono_literals;
       return (lh) > (rh); \
   } while(0)
 
+namespace
+{
+bool IsBrazilianPortugueseCode(const std::string& code)
+{
+  return g_LangCodeExpander.CompareISO639Codes(code, "pob");
+}
+
+bool MatchesLanguageOrPortugueseFallback(const std::string& prefLang, const std::string& streamLang)
+{
+  if (g_LangCodeExpander.CompareISO639Codes(prefLang, streamLang))
+    return true;
+
+  // Most streams tag PT-BR audio/subtitles as generic Portuguese ("por"/"pt"), which does
+  // not match "pob" in CompareISO639Codes(). Treat them as compatible while exact matches keep priority.
+  return (IsBrazilianPortugueseCode(prefLang) &&
+          g_LangCodeExpander.CompareISO639Codes("por", streamLang)) ||
+         (IsBrazilianPortugueseCode(streamLang) &&
+          g_LangCodeExpander.CompareISO639Codes("por", prefLang));
+}
+} // namespace
+
 class PredicateSubtitleFilter
 {
 private:
@@ -119,7 +140,7 @@ public:
 
     if (onlyforced)
     {
-      if ((ss.flags & StreamFlags::FLAG_FORCED) && g_LangCodeExpander.CompareISO639Codes(ss.language, audiolang))
+      if ((ss.flags & StreamFlags::FLAG_FORCED) && MatchesLanguageOrPortugueseFallback(audiolang, ss.language))
         return false;
       else
         return true;
@@ -128,7 +149,7 @@ public:
     if(STREAM_SOURCE_MASK(ss.source) == STREAM_SOURCE_DEMUX_SUB || STREAM_SOURCE_MASK(ss.source) == STREAM_SOURCE_TEXT)
       return false;
 
-    if ((ss.flags & StreamFlags::FLAG_FORCED) && g_LangCodeExpander.CompareISO639Codes(ss.language, audiolang))
+    if ((ss.flags & StreamFlags::FLAG_FORCED) && MatchesLanguageOrPortugueseFallback(audiolang, ss.language))
       return false;
 
     if ((ss.flags & StreamFlags::FLAG_FORCED) && (ss.flags & StreamFlags::FLAG_DEFAULT))
@@ -140,7 +161,7 @@ public:
     if(!original)
     {
       std::string subtitle_language = g_langInfo.GetSubtitleLanguage();
-      if (g_LangCodeExpander.CompareISO639Codes(subtitle_language, ss.language))
+      if (MatchesLanguageOrPortugueseFallback(subtitle_language, ss.language))
         return false;
     }
     else if (ss.flags & StreamFlags::FLAG_DEFAULT)
@@ -175,6 +196,8 @@ public:
         std::string audio_language = g_langInfo.GetAudioLanguage();
         PREDICATE_RETURN(g_LangCodeExpander.CompareISO639Codes(audio_language, lh.language)
           , g_LangCodeExpander.CompareISO639Codes(audio_language, rh.language));
+        PREDICATE_RETURN(MatchesLanguageOrPortugueseFallback(audio_language, lh.language)
+          , MatchesLanguageOrPortugueseFallback(audio_language, rh.language));
       }
       else
       {
@@ -264,14 +287,14 @@ public:
 
     if (!subson || original)
     {
-      PREDICATE_RETURN(lh.flags & StreamFlags::FLAG_FORCED && g_LangCodeExpander.CompareISO639Codes(lh.language, audiolang)
-                     , rh.flags & StreamFlags::FLAG_FORCED && g_LangCodeExpander.CompareISO639Codes(rh.language, audiolang));
+      PREDICATE_RETURN(lh.flags & StreamFlags::FLAG_FORCED && MatchesLanguageOrPortugueseFallback(audiolang, lh.language)
+                     , rh.flags & StreamFlags::FLAG_FORCED && MatchesLanguageOrPortugueseFallback(audiolang, rh.language));
 
-      PREDICATE_RETURN(lh.flags & StreamFlags::FLAG_DEFAULT && g_LangCodeExpander.CompareISO639Codes(lh.language, audiolang)
-                     , rh.flags & StreamFlags::FLAG_DEFAULT && g_LangCodeExpander.CompareISO639Codes(rh.language, audiolang));
+      PREDICATE_RETURN(lh.flags & StreamFlags::FLAG_DEFAULT && MatchesLanguageOrPortugueseFallback(audiolang, lh.language)
+                     , rh.flags & StreamFlags::FLAG_DEFAULT && MatchesLanguageOrPortugueseFallback(audiolang, rh.language));
 
-      PREDICATE_RETURN(g_LangCodeExpander.CompareISO639Codes(lh.language, audiolang)
-                     , g_LangCodeExpander.CompareISO639Codes(rh.language, audiolang));
+      PREDICATE_RETURN(MatchesLanguageOrPortugueseFallback(audiolang, lh.language)
+                     , MatchesLanguageOrPortugueseFallback(audiolang, rh.language));
 
       PREDICATE_RETURN((lh.flags & (StreamFlags::FLAG_FORCED | StreamFlags::FLAG_DEFAULT)) == (StreamFlags::FLAG_FORCED | StreamFlags::FLAG_DEFAULT)
                      , (rh.flags & (StreamFlags::FLAG_FORCED | StreamFlags::FLAG_DEFAULT)) == (StreamFlags::FLAG_FORCED | StreamFlags::FLAG_DEFAULT));
@@ -283,12 +306,16 @@ public:
     {
       PREDICATE_RETURN((STREAM_SOURCE_MASK(lh.source) == STREAM_SOURCE_DEMUX_SUB || STREAM_SOURCE_MASK(lh.source) == STREAM_SOURCE_TEXT) && g_LangCodeExpander.CompareISO639Codes(subtitle_language, lh.language)
                      , (STREAM_SOURCE_MASK(rh.source) == STREAM_SOURCE_DEMUX_SUB || STREAM_SOURCE_MASK(rh.source) == STREAM_SOURCE_TEXT) && g_LangCodeExpander.CompareISO639Codes(subtitle_language, rh.language));
+      PREDICATE_RETURN((STREAM_SOURCE_MASK(lh.source) == STREAM_SOURCE_DEMUX_SUB || STREAM_SOURCE_MASK(lh.source) == STREAM_SOURCE_TEXT) && MatchesLanguageOrPortugueseFallback(subtitle_language, lh.language)
+                     , (STREAM_SOURCE_MASK(rh.source) == STREAM_SOURCE_DEMUX_SUB || STREAM_SOURCE_MASK(rh.source) == STREAM_SOURCE_TEXT) && MatchesLanguageOrPortugueseFallback(subtitle_language, rh.language));
     }
 
     if (!original)
     {
       PREDICATE_RETURN(g_LangCodeExpander.CompareISO639Codes(subtitle_language, lh.language)
                      , g_LangCodeExpander.CompareISO639Codes(subtitle_language, rh.language));
+      PREDICATE_RETURN(MatchesLanguageOrPortugueseFallback(subtitle_language, lh.language)
+                     , MatchesLanguageOrPortugueseFallback(subtitle_language, rh.language));
 
       bool hearingimp = CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_ACCESSIBILITY_SUBHEARING);
       PREDICATE_RETURN(!hearingimp ? !(lh.flags & StreamFlags::FLAG_HEARING_IMPAIRED) : lh.flags & StreamFlags::FLAG_HEARING_IMPAIRED
@@ -3544,6 +3571,10 @@ bool CVideoPlayer::OpenStream(CCurrentStream& current, int64_t demuxerId, int iS
   CDemuxStream* stream = NULL;
   CDVDStreamInfo hint;
 
+  // CloseFile() is waiting for this thread
+  if (m_bStop)
+    return false;
+
   CLog::Log(LOGINFO, "Opening stream: {} source: {}", iStream, source);
 
   if(STREAM_SOURCE_MASK(source) == STREAM_SOURCE_DEMUX_SUB)
@@ -3661,7 +3692,7 @@ bool CVideoPlayer::OpenStream(CCurrentStream& current, int64_t demuxerId, int iS
   }
   else
   {
-    if(stream)
+    if (stream && !m_bStop)
     {
       /* mark stream as disabled, to disallow further attempts*/
       CLog::Log(LOGWARNING, "{} - Unsupported stream {}. Stream disabled.", __FUNCTION__,
@@ -3768,7 +3799,11 @@ bool CVideoPlayer::OpenVideoStream(CDVDStreamInfo& hint, bool reset)
                                                    (hint.fpsrate * (hint.interlaced ? 2 : 1)));
 
       RESOLUTION res = CResolutionUtils::ChooseBestResolution(static_cast<float>(framerate), hint.width, hint.height, !hint.stereo_mode.empty());
-      CServiceBroker::GetWinSystem()->GetGfxContext().SetVideoResolution(res, false);
+      // CloseFile() blocks the app thread in StopThread(), don't wait for it past that
+      CServiceBroker::GetWinSystem()->GetGfxContext().SetVideoResolution(res, false,
+                                                                         &GetStopEvent());
+      if (m_bStop)
+        return false;
       m_renderManager.TriggerUpdateResolution(framerate, hint.width, hint.height, hint.stereo_mode);
     }
   }
@@ -3845,7 +3880,7 @@ void CVideoPlayer::AdaptForcedSubtitles()
     bool isVisible = false;
     for (const auto &stream : m_SelectionStreams.Get(STREAM_SUBTITLE))
     {
-      if (stream.flags & StreamFlags::FLAG_FORCED && g_LangCodeExpander.CompareISO639Codes(stream.language, as.language))
+      if (stream.flags & StreamFlags::FLAG_FORCED && MatchesLanguageOrPortugueseFallback(as.language, stream.language))
       {
         if (OpenStream(m_CurrentSubtitle, stream.demuxerId, stream.id, stream.source))
         {

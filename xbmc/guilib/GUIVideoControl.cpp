@@ -9,6 +9,7 @@
 #include "GUIVideoControl.h"
 
 #include "GUIComponent.h"
+#include "GUIMessage.h"
 #include "GUIWindowManager.h"
 #include "ServiceBroker.h"
 #include "application/ApplicationComponents.h"
@@ -33,10 +34,33 @@ void CGUIVideoControl::Process(unsigned int currentTime, CDirtyRegionList &dirty
   //! @todo Proper processing which marks when its actually changed. Just mark always for now.
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  if (appPlayer->IsRenderingGuiLayer())
+  const bool renderingVideo = appPlayer->IsRenderingVideo();
+  const bool renderingInGui = renderingVideo && !appPlayer->IsRenderingVideoLayer();
+  // Also once whenever the video starts, stops or changes layer, so its area
+  // is redrawn: on its own layer that opens or closes the hole for it
+  if (renderingInGui || renderingVideo != m_renderingVideo || renderingInGui != m_renderingInGui)
     MarkDirtyRegion();
+  m_renderingVideo = renderingVideo;
+  m_renderingInGui = renderingInGui;
 
   CGUIControl::Process(currentTime, dirtyregions);
+}
+
+bool CGUIVideoControl::OnMessage(CGUIMessage& message)
+{
+  // With smart redraw a window that hasn't changed isn't processed, so check on
+  // its refresh timer whether the video has started, stopped or changed layer
+  if (message.GetMessage() == GUI_MSG_REFRESH_TIMER && IsVisible())
+  {
+    const auto& components = CServiceBroker::GetAppComponents();
+    const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+    const bool renderingVideo = appPlayer->IsRenderingVideo();
+    const bool renderingInGui = renderingVideo && !appPlayer->IsRenderingVideoLayer();
+    if (renderingVideo != m_renderingVideo || renderingInGui != m_renderingInGui)
+      MarkDirtyRegion();
+  }
+
+  return CGUIControl::OnMessage(message);
 }
 
 void CGUIVideoControl::Render()

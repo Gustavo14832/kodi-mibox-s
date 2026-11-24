@@ -1352,7 +1352,7 @@ void CGUIWindowManager::AfterRender()
       window->AfterRender();
       // Dialog state can affect visibility states
       if (pWindow && window->IsControlDirty())
-        pWindow->MarkDirtyRegion();
+        pWindow->MarkDirtyRegion(CGUIControl::DIRTY_STATE_CHILD);
     }
   }
 }

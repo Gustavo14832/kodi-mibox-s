@@ -505,6 +505,7 @@ void CVideoPlayerVideo::Process()
           break;
       }
 
+      m_pVideoCodec.reset();
       OpenStream(msg->m_hints, std::move(msg->m_codec));
       msg->m_codec = NULL;
       if (m_picture.videoBuffer)

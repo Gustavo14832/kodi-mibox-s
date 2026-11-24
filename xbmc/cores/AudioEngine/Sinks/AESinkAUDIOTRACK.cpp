@@ -20,6 +20,7 @@
 
 #include "platform/android/activity/XBMCApp.h"
 
+#include <algorithm>
 #include <androidjni/AudioFormat.h>
 #include <androidjni/AudioManager.h>
 #include <androidjni/AudioTrack.h>
@@ -224,6 +225,7 @@ CAESinkAUDIOTRACK::CAESinkAUDIOTRACK()
   m_duration_written = 0;
   m_headPos = 0;
   m_stuckCounter = 0;
+  m_stuckIndicator = false;
   m_headPosOld = 0;
   m_timestampPos = 0;
   m_sink_sampleRate = 0;
@@ -293,6 +295,7 @@ bool CAESinkAUDIOTRACK::Initialize(AEAudioFormat &format, std::string &device)
   m_format      = format;
   m_headPos = 0;
   m_stuckCounter = 0;
+  m_stuckIndicator = false;
   m_headPosOld = 0;
   m_timestampPos = 0;
   m_linearmovingaverage.clear();
@@ -626,6 +629,8 @@ void CAESinkAUDIOTRACK::Deinitialize()
   m_duration_written = 0;
   m_headPos = 0;
   m_headPosOld = 0;
+  m_stuckCounter = 0;
+  m_stuckIndicator = false;
   m_timestampPos = 0;
   m_timestampValid = false;
   m_flushTime = 0;
@@ -666,14 +671,20 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
   // clear lower 32 bit values, e.g. 0x0001 FFFF FFFF -> 0x0001 0000 0000
   // and add head_pos which wrapped around, e.g. 0x0001 0000 0000 -> 0x0001 0000 0004
   m_headPos = (m_headPos & UINT64_UPPER_BYTES) | (uint64_t)head_pos;
-  // check if sink is stuck
+  // check if sink is stuck. This workaround assumes a
+  // 1:1 Relationship between AddPacket and GetDelay
+  // Don't report false stucks when nothing was added
   if (m_headPos == m_headPosOld)
-    m_stuckCounter++;
+  {
+    if (m_stuckIndicator)
+      m_stuckCounter++;
+  }
   else
   {
     m_stuckCounter = 0;
     m_headPosOld = m_headPos;
   }
+  m_stuckIndicator = false;
 
   double gone = static_cast<double>(m_headPos) / m_sink_sampleRate;
 
@@ -815,7 +826,40 @@ void CAESinkAUDIOTRACK::GetDelay(AEDelayStatus& status)
   {
     CLog::Log(LOGINFO, "Delay Current: {:f} ms", d * 1000);
   }
-  status.SetDelay(d);
+  double startup_raw_delay = 0.0;
+  if (isRawPt)
+    startup_raw_delay = GetRawStartupDelay();
+
+  status.SetDelay(d + startup_raw_delay);
+}
+
+// RAW passthrough: after a flush the output starts ~100 ms after the first write, with the
+// playback head at 0 until then. Report the remaining start-up time as extra delay, so A/V sync
+// corrects it while nothing is audible yet instead of later by dropping frames during speech.
+// The lag is measured at every start (no per-device constant) and kept across flushes.
+double CAESinkAUDIOTRACK::GetRawStartupDelay()
+{
+  if (!m_startPending || !m_passthrough || m_info.m_wantsIECPassthrough)
+    return 0.0;
+
+  const double elapsed =
+      m_startWriteCounter != 0
+          ? static_cast<double>(CurrentHostCounter() - m_startWriteCounter) / CurrentHostFrequency()
+          : 0.0;
+
+  if (m_startWriteCounter != 0 && m_headPos > 0) // output started
+  {
+    const double lag =
+        std::clamp(elapsed - static_cast<double>(m_headPos) / m_sink_sampleRate, 0.0, 0.5);
+    // ignore outliers (e.g. data arriving late), average the rest
+    if (m_startLag <= 0.0)
+      m_startLag = lag;
+    else if (lag < 2 * m_startLag + 0.05)
+      m_startLag = (m_startLag + lag) / 2;
+    m_startPending = false;
+    return 0.0;
+  }
+  return std::max(m_startLag - elapsed, 0.0);
 }
 
 double CAESinkAUDIOTRACK::GetLatency()
@@ -848,11 +892,16 @@ unsigned int CAESinkAUDIOTRACK::AddPackets(uint8_t **data, unsigned int frames, 
     const double max_stuck_delay_ms = m_audiotrackbuffer_sec_orig * 2000.0;
     const double stime_ms = 1000.0 * frames / m_format.m_sampleRate;
 
-    if (m_superviseAudioDelay && (m_stuckCounter * stime_ms > max_stuck_delay_ms))
+    if (m_superviseAudioDelay)
     {
-      CLog::Log(LOGERROR, "Sink got stuck with {:f} ms - ask AE for reopening", max_stuck_delay_ms);
-      usleep(max_stuck_delay_ms * 1000);
-      return INT_MAX;
+      // a Packet was added that should move the sink
+      m_stuckIndicator = true;
+      if (m_stuckCounter * stime_ms > max_stuck_delay_ms)
+      {
+        CLog::Log(LOGERROR, "Sink got stuck with {:f} ms - ask AE for reopening", max_stuck_delay_ms);
+        usleep(max_stuck_delay_ms * 1000);
+        return INT_MAX;
+      }
     }
   }
 
@@ -868,6 +917,9 @@ unsigned int CAESinkAUDIOTRACK::AddPackets(uint8_t **data, unsigned int frames, 
   int loop_written = 0;
   if (frames)
   {
+    if (m_startPending && m_startWriteCounter == 0)
+      m_startWriteCounter = CurrentHostCounter();
+
     if (m_at_jni->getPlayState() != CJNIAudioTrack::PLAYSTATE_PLAYING)
       m_at_jni->play();
 
@@ -999,7 +1051,8 @@ void CAESinkAUDIOTRACK::AddPause(unsigned int millis)
 
   // RAW has no actual pause packet to write. On an empty track, booking a
   // pause as queued audio would report delay for audio which does not exist.
-  if (!m_rawNeedsFlush)
+  const double queued = m_duration_written - static_cast<double>(m_headPos) / m_sink_sampleRate;
+  if (queued <= 0.0)
   {
     usleep(millis * 1000);
     return;
@@ -1040,12 +1093,15 @@ void CAESinkAUDIOTRACK::Flush()
   m_timestampPos = 0;
   m_timestampValid = false;
   m_stuckCounter = 0;
+  m_stuckIndicator = false;
   m_pause_ms = 0.0;
   m_delay = 0.0;
   m_hw_delay = 0.0;
   m_audiotrackbuffer_sec = m_audiotrackbuffer_sec_orig;
   m_linearmovingaverage.clear();
   m_stampTimer.SetExpired();
+  m_startPending = true;
+  m_startWriteCounter = 0;
 }
 
 void CAESinkAUDIOTRACK::Drain()
@@ -1063,11 +1119,16 @@ void CAESinkAUDIOTRACK::Drain()
   m_duration_written = 0;
   m_headPos = 0;
   m_stuckCounter = 0;
+  m_stuckIndicator = false;
   m_timestampPos = 0;
   m_timestampValid = false;
   m_linearmovingaverage.clear();
   m_stampTimer.SetExpired();
   m_pause_ms = 0.0;
+  if (m_passthrough && !m_info.m_wantsIECPassthrough)
+    m_hw_delay = 0.0;
+  m_startPending = true;
+  m_startWriteCounter = 0;
 }
 
 void CAESinkAUDIOTRACK::Register()

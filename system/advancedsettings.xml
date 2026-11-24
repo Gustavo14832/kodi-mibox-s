@@ -6,17 +6,14 @@
     <maxpassthroughoffsyncduration>80</maxpassthroughoffsyncduration>
   </audio>
 
-  <!-- Auto-limpeza de cache de pacotes (evita acumular lixo na memória interna eMMC) -->
-  <packagecache>
-    <maxage>1</maxage>
-  </packagecache>
+  <!-- Limite enxuto do cache de instaladores ZIP/pacotes na memória interna eMMC -->
   <packagefoldersize>20</packagefoldersize>
 
   <!-- Aproveitamento da memória flash eMMC 5.2 de 32 GB para capas e miniaturas em alta fidelidade -->
   <fanartres>1080</fanartres>
   <imageres>720</imageres>
 
-  <!-- Otimizações de rede e estabilidade de socket para evitar erro 410 e quedas de CDN -->
+  <!-- Otimizações de rede e estabilidade de socket para evitar erros transitórios e quedas de CDN -->
   <network>
     <curlclienttimeout>10</curlclienttimeout>
     <curllowspeedtime>10</curllowspeedtime>
@@ -26,10 +23,11 @@
     <disableipv6>true</disableipv6>
   </network>
 
-  <!-- Filtro de debanding por hardware para suavização de streams e IPTV compactado -->
-  <video>
-    <deband>true</deband>
-  </video>
+  <!-- Redesenho inteligente e regiões sujas: reduz carga de CPU/GPU quando a interface está parada -->
+  <gui>
+    <algorithmdirtyregions>3</algorithmdirtyregions>
+    <smartredraw>true</smartredraw>
+  </gui>
 
   <!-- Troca instantânea de canal ao vivo (PVR / IPTV) -->
   <pvr>

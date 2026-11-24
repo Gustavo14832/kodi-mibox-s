@@ -25,6 +25,7 @@ import android.text.Html;
 import android.text.method.LinkMovementMethod;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -84,6 +85,8 @@ public class Splash extends Activity
   private boolean mExternalStorageChecked = false;
   private boolean mCachingDone = false;
   private boolean mPermissionOK = false;
+  private boolean mHandoffPending = false;
+  private boolean mMainLaunched = false;
 
   private class StateMachine extends Handler
   {
@@ -617,8 +620,51 @@ public class Splash extends Activity
       unregisterReceiver(mExternalStorageReceiver);
   }
 
+  @Override
+  public void onWindowFocusChanged(boolean hasFocus)
+  {
+    super.onWindowFocusChanged(hasFocus);
+    if (!hasFocus && mHandoffPending)
+    {
+      mStateMachine.post(new Runnable()
+      {
+        @Override
+        public void run()
+        {
+          launchMain();
+        }
+      });
+    }
+  }
+
   protected void startXBMC()
   {
+    if (mHandoffPending || mMainLaunched || isFinishing() || isDestroyed())
+      return;
+
+    mHandoffPending = true;
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+    if (!hasWindowFocus())
+    {
+      mStateMachine.post(new Runnable()
+      {
+        @Override
+        public void run()
+        {
+          launchMain();
+        }
+      });
+    }
+  }
+
+  private void launchMain()
+  {
+    if (!mHandoffPending || mMainLaunched || isFinishing() || isDestroyed())
+      return;
+
+    mHandoffPending = false;
+    mMainLaunched = true;
+
     // Run @APP_NAME@
     Intent intent = getIntent();
     intent.setClass(this, @APP_PACKAGE@.Main.class);

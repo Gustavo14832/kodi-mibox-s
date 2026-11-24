@@ -121,8 +121,10 @@ bool CMediaCodecVideoBuffer::WaitForFrame(int millis)
 
 void CMediaCodecVideoBuffer::ReleaseOutputBuffer(bool render, int64_t displayTime, CMediaCodecVideoBufferPool* pool)
 {
-  std::shared_ptr<CJNIMediaCodec> codec(
-      static_cast<CMediaCodecVideoBufferPool*>(pool ? pool : m_pool.get())->GetMediaCodec());
+  auto* bufferPool{static_cast<CMediaCodecVideoBufferPool*>(pool ? pool : m_pool.get())};
+  std::unique_lock<CCriticalSection> lock(bufferPool->GetCriticalSection());
+
+  std::shared_ptr<CJNIMediaCodec> codec(bufferPool->GetMediaCodec());
 
   if (m_bufferId < 0 || !codec)
     return;
@@ -289,6 +291,13 @@ void CMediaCodecVideoBufferPool::ReleaseMediaCodecBuffers()
     buffer->ReleaseOutputBuffer(false, 0, this);
 }
 
+void CMediaCodecVideoBufferPool::InvalidateMediaCodecBuffers()
+{
+  std::unique_lock<CCriticalSection> lock(m_criticalSection);
+  for (auto buffer : m_videoBuffers)
+    buffer->InvalidateOutputBuffer();
+}
+
 
 /*****************************************************************************/
 /*****************************************************************************/
@@ -338,14 +347,14 @@ bool CDVDVideoCodecAndroidMediaCodec::Open(CDVDStreamInfo &hints, CDVDCodecOptio
   int profile(0);
   CJNIUUID uuid(0, 0);
 
-  m_opened = false;
-  m_needSecureDecoder = false;
   // allow only 1 instance here
   if (m_InstanceGuard.exchange(true))
   {
     CLog::Log(LOGERROR, "CDVDVideoCodecAndroidMediaCodec::Open - InstanceGuard locked");
     return false;
   }
+  m_opened = false;
+  m_needSecureDecoder = false;
 
   // mediacodec crashes with null size. Trap this...
   if (!hints.width || !hints.height)
@@ -1196,12 +1205,20 @@ void CDVDVideoCodecAndroidMediaCodec::Reset()
   {
     // now we can flush the actual MediaCodec object
     CLog::Log(LOGDEBUG, "CDVDVideoCodecAndroidMediaCodec::Reset Current state ({})", m_state);
-    m_codec->flush();
-    if (xbmc_jnienv()->ExceptionCheck())
     {
-      xbmc_jnienv()->ExceptionDescribe();
-      xbmc_jnienv()->ExceptionClear();
-      CLog::Log(LOGERROR, "CDVDVideoCodecAndroidMediaCodec::Reset: flush failed");
+      // No output buffer may be released between flush() and its invalidation
+      std::unique_lock<CCriticalSection> lock(m_videoBufferPool->GetCriticalSection());
+
+      m_codec->flush();
+      if (xbmc_jnienv()->ExceptionCheck())
+      {
+        xbmc_jnienv()->ExceptionDescribe();
+        xbmc_jnienv()->ExceptionClear();
+        CLog::Log(LOGERROR, "CDVDVideoCodecAndroidMediaCodec::Reset: flush failed");
+      }
+
+      // flush() hands all output buffers back to MediaCodec, their indices are invalid now
+      m_videoBufferPool->InvalidateMediaCodecBuffers();
     }
 
     if (m_state == MEDIACODEC_STATE_ERROR)

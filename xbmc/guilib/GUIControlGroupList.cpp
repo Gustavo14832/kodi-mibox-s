@@ -70,6 +70,7 @@ void CGUIControlGroupList::Process(unsigned int currentTime, CDirtyRegionList &d
   // we run through the controls, rendering as we go
   int index = 0;
   float pos = GetAlignOffset();
+  m_childRegion = CRect();
   for (iControls it = m_children.begin(); it != m_children.end(); ++it)
   {
     // note we render all controls, even if they're offscreen, as then they'll be updated
@@ -83,6 +84,7 @@ void CGUIControlGroupList::Process(unsigned int currentTime, CDirtyRegionList &d
 
     if (control->IsVisible())
     {
+      m_childRegion.Union(control->GetDrawnRegion());
       if (IsControlOnScreen(pos, control))
       {
         if (control->HasFocus())
@@ -95,6 +97,11 @@ void CGUIControlGroupList::Process(unsigned int currentTime, CDirtyRegionList &d
     CServiceBroker::GetWinSystem()->GetGfxContext().RestoreOrigin();
   }
   CGUIControl::Process(currentTime, dirtyregions);
+  // children are drawn up to the clip size, which can exceed the render region, and a list
+  // without a size doesn't clip them at all
+  const CRect clip(m_posX, m_posY, m_posX + m_width, m_posY + m_height);
+  if (!clip.IsEmpty())
+    m_childRegion.Intersect(CServiceBroker::GetWinSystem()->GetGfxContext().GenerateAABB(clip));
 }
 
 void CGUIControlGroupList::Render()
@@ -391,7 +398,8 @@ void CGUIControlGroupList::ScrollTo(float offset)
   m_scroller.ScrollTo(offset);
   if (m_scroller.IsScrolling())
     SetInvalid();
-  MarkDirtyRegion();
+  // Process() marks the control dirty while it scrolls
+  MarkDirtyRegion(DIRTY_STATE_CHILD);
 }
 
 EVENT_RESULT CGUIControlGroupList::SendMouseEvent(const CPoint& point,

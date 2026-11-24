@@ -35,6 +35,7 @@
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
 
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -494,14 +495,6 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
       av_dict_set_int(&options, "sample_rate", samplerate, 0);
     }
 
-    if (m_ioContext && m_ioContext->seekable == 0)
-    {
-      CLog::Log(LOGDEBUG, "{} - live stream detected, applying low-latency probesize & analyzeduration", __FUNCTION__);
-      av_dict_set(&options, "probesize", "131072", 0);
-      av_dict_set(&options, "analyzeduration", "500000", 0);
-      av_dict_set(&options, "fflags", "nobuffer+fastseek", 0);
-    }
-
     if (avformat_open_input(&m_pFormatContext, strFile.c_str(), iformat, &options) < 0)
     {
       CLog::Log(LOGERROR, "{} - Error, could not open file {}", __FUNCTION__,
@@ -601,8 +594,6 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
 
   // if format can be nonblocking, let's use that
   m_pFormatContext->flags |= AVFMT_FLAG_NONBLOCK;
-  if (m_ioContext && m_ioContext->seekable == 0)
-    m_pFormatContext->flags |= AVFMT_FLAG_NOBUFFER;
 
   // select the correct program if requested
   m_initialProgramNumber = UINT_MAX;
@@ -737,6 +728,7 @@ void CDVDDemuxFFmpeg::Flush()
   m_displayTime = 0;
   m_dtsAtDisplayTime = DVD_NOPTS_VALUE;
   m_seekToKeyFrame = false;
+  m_streamChangeDuringSeek = false;
 }
 
 void CDVDDemuxFFmpeg::Abort()
@@ -1259,6 +1251,20 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
 
 DemuxPacket* CDVDDemuxFFmpeg::Read()
 {
+  // A stream change was detected and discarded while SeekTime() was waiting for the
+  // transport stream to become ready. Deliver the deferred marker now, before any real
+  // data packet, so VideoPlayer::Process() still reopens the video codec with complete
+  // hints (see SeekTime()'s m_checkTransportStream wait loop).
+  if (m_streamChangeDuringSeek)
+  {
+    m_streamChangeDuringSeek = false;
+
+    DemuxPacket* pPacket = CDVDDemuxUtils::AllocateDemuxPacket(0);
+    pPacket->iStreamId = DMX_SPECIALID_STREAMCHANGE;
+    pPacket->demuxerId = GetDemuxerId();
+    return pPacket;
+  }
+
   return ReadInternal(false);
 }
 
@@ -1308,9 +1314,21 @@ bool CDVDDemuxFFmpeg::SeekTime(double time, bool backwards, double* startpts)
 
     while (!IsTransportStreamReady())
     {
-      DemuxPacket* pkt = Read();
+      // Call ReadInternal() directly rather than Read(): this loop must keep draining
+      // real packets until the transport stream is ready, so it must not be short-circuited
+      // by the deferred stream-change marker that Read() may hand out (see m_streamChangeDuringSeek).
+      DemuxPacket* pkt = ReadInternal(false);
       if (pkt)
+      {
+        // Read() would normally hand this marker to VideoPlayer so it can reopen the video
+        // codec with complete hints once mpegts/H.264 extradata parsing finishes. This loop
+        // discards it instead, so remember it and let the next Read() call after SeekTime()
+        // deliver it, once the caller starts reading normally again.
+        if (pkt->iStreamId == DMX_SPECIALID_STREAMCHANGE)
+          m_streamChangeDuringSeek = true;
+
         CDVDDemuxUtils::FreeDemuxPacket(pkt);
+      }
       else
         KODI::TIME::Sleep(10ms);
       m_pkt.result = -1;
@@ -1538,6 +1556,22 @@ double CDVDDemuxFFmpeg::SelectAspect(AVStream* st, bool& forced)
 
 void CDVDDemuxFFmpeg::CreateStreams(unsigned int program)
 {
+  // changes must keep increasing across rebuilds; consumers detect a rebuild by comparing values
+  std::map<int, int> prevChanges;
+  for (const auto& [streamIdx, stream] : m_streams)
+    prevChanges[streamIdx] = stream->changes;
+
+  // only carries on the rebuild path; on Open() m_streams is empty and there is nothing to carry
+  const auto addStreamKeepingChanges = [this, &prevChanges](int streamIdx)
+  {
+    CDemuxStream* stream = AddStream(streamIdx);
+    if (!stream)
+      return;
+
+    if (const auto it = prevChanges.find(streamIdx); it != prevChanges.end())
+      stream->changes = it->second + 1;
+  };
+
   DisposeStreams();
 
   // add the ffmpeg streams to our own stream map
@@ -1573,7 +1607,7 @@ void CDVDDemuxFFmpeg::CreateStreams(unsigned int program)
       {
         int streamIdx = m_pFormatContext->programs[m_program]->stream_index[i];
         m_pFormatContext->streams[streamIdx]->discard = AVDISCARD_NONE;
-        AddStream(streamIdx);
+        addStreamKeepingChanges(streamIdx);
       }
 
       // discard all unneeded streams
@@ -1592,7 +1626,7 @@ void CDVDDemuxFFmpeg::CreateStreams(unsigned int program)
   if (m_program == UINT_MAX)
   {
     for (unsigned int i = 0; i < m_pFormatContext->nb_streams; i++)
-      AddStream(i);
+      addStreamKeepingChanges(static_cast<int>(i));
   }
 }
 
@@ -2001,6 +2035,8 @@ void CDVDDemuxFFmpeg::AddStream(int streamIdx, CDemuxStream* stream)
   }
   else
   {
+    // changes must keep increasing across replacements; consumers detect them by comparing values
+    stream->changes = res.first->second->changes + 1;
     delete res.first->second;
     res.first->second = stream;
   }

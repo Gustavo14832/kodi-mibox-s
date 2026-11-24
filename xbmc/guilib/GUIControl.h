@@ -185,12 +185,18 @@ public:
   virtual float GetWidth() const;
   virtual float GetHeight() const;
 
+  static const unsigned int DIRTY_STATE_CONTROL = 1; //This control is dirty
+  static const unsigned int DIRTY_STATE_CHILD = 2; //One / more children are dirty
   void MarkDirtyRegion(const unsigned int dirtyState = DIRTY_STATE_CONTROL);
   bool IsControlDirty() const { return m_controlDirtyState != 0; }
 
   /*! \brief return the render region in screen coordinates of this control
    */
   const CRect& GetRenderRegion() const { return m_renderRegion; }
+  /*! \brief return the region in screen coordinates this control and its children are drawn in
+   Marked dirty when the control itself changed
+   */
+  virtual CRect GetDrawnRegion() const { return m_renderRegion; }
   /*! \brief calculate the render region in parentcontrol coordinates of this control
    Called during process to update m_renderRegion
    */
@@ -382,9 +388,6 @@ protected:
   TransformMatrix m_transform;
   TransformMatrix m_cachedTransform; // Contains the absolute transform the control
   bool m_isCulled{true};
-
-  static const unsigned int DIRTY_STATE_CONTROL = 1; //This control is dirty
-  static const unsigned int DIRTY_STATE_CHILD = 2; //One / more children are dirty
 
   unsigned int  m_controlDirtyState;
   CRect m_renderRegion;         // In screen coordinates

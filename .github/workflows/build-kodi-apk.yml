@@ -470,55 +470,34 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: mibox-s-build-${{ github.run_number }}
-          name: "Kodi 21.3.4 Omega MiBox S (Build #${{ github.run_number }})"
+          name: "Kodi 21.3.5 Omega MiBox S (Build #${{ github.run_number }})"
           body: |
-            ## 🚀 Kodi 21.3.4 (Omega) - Xiaomi TV Box S Custom Build
-
-            Build de alta performance desenvolvida sob medida para a **Xiaomi TV Box S (3ª Geração)** (SoC Amlogic S905X5M / S905X4, Quad-Core Cortex-A55 @ 2.5GHz, GPU Mali-G310 V2, 2GB RAM, 32GB eMMC, Android 14 Google TV, target `armeabi-v7a`).
-
-            ---
+            ## 🚀 Kodi 21.3.5 (Omega) - Xiaomi TV Box S Custom Build
 
             ### 📦 Edições Disponíveis para Download:
-            Escolha o arquivo `.apk` correspondente ao tipo de conexão que sua Mi Box utiliza:
-
-            1. **`Kodi-MiBox-S-Omega-Ethernet-armeabi-v7a.apk` (Edição Cabo de Rede Gigabit / 100M):**
-               - **Buffer RAM:** 64 MB (Consumo efetivo ~192 MB em RAM).
-               - **Fator de Leitura (Read Factor):** 20x (`2000`).
-               - **Tamanho do Chunk de Rede:** 256 KB (`262144`).
-               - **Modo de Buffer:** Modo 2 (Streams de Internet).
-               - **Perfil:** Otimizado para latência fixa ultrabaixa (< 1ms) e fluxo constante via adaptador USB Ethernet.
-
-            2. **`Kodi-MiBox-S-Omega-WiFi-armeabi-v7a.apk` (Edição Wi-Fi 5 e Wi-Fi 6 AC/AX 5GHz):**
-               - **Buffer RAM:** 96 MB (Consumo efetivo ~288 MB em RAM — armazena mais de 1 minuto de vídeo 4K de 20 Mbps pré-carregado).
-               - **Fator de Leitura (Read Factor):** 35x (`3500`) — preenchimento agressivo para aproveitar picos de largura de banda 5GHz (300-500 Mbps).
-               - **Tamanho do Chunk de Rede:** 512 KB (`524288`) — calibrado com os frames agregados (A-MPDU) dos padrões 802.11ac e 802.11ax.
-               - **Modo de Buffer:** Modo 1 (Buffer ativo para toda a rede: Internet + Rede Local SMB/NFS/WebDAV).
-               - **Perfil:** Máxima resiliência contra interferência de RF, jitter e variações de sinal Wi-Fi.
-
-            *(Nota: O arquivo `Kodi-MiBox-S-Omega-armeabi-v7a.apk` também está disponível e é idêntico à Edição Ethernet).*
+            1. **`Kodi-MiBox-S-Omega-Ethernet-armeabi-v7a.apk`** — Para cabo de rede USB Ethernet (Buffer 64 MB, ReadFactor 20x, Chunk 256 KB, Modo 2). *(Idêntico ao `Kodi-MiBox-S-Omega-armeabi-v7a.apk`)*
+            2. **`Kodi-MiBox-S-Omega-WiFi-armeabi-v7a.apk`** — Para Wi-Fi 5/6 AC/AX 5GHz (Buffer 96 MB, ReadFactor 35x, Chunk 512 KB, Modo 1 para toda a rede).
 
             ---
 
-            ### ⚙️ Novidades Desta Versão (Build #${{ github.run_number }}):
+            ### ⚙️ Novidades Exclusivas Desta Versão (21.3.5):
 
-            #### 1. 📺 Add-ons Instalados na Tela Inicial por Padrão (Acesso 1-Click Direto):
-            - **Carrossel de Add-ons na Tela Inicial (`Home.xml`):** Os widgets de Add-ons de Vídeo (`addons://sources/video/`) e Add-ons de Programas (`addons://sources/executable/`) agora são renderizados diretamente na tela principal do Kodi.
-            - **Supressão do Aviso de Biblioteca Vazia:** A mensagem genérica de biblioteca vazia é suprimida automaticamente assim que qualquer add-on de streaming estiver instalado, dando lugar imediato aos ícones dos seus add-ons.
-            - **Visibilidade Total Sem Cortes (`widget_limit = 100`):** O limite padrão de 15 itens foi expandido para 100 em todos os widgets de add-ons, garantindo que todas as extensões instaladas apareçam na tela.
-            - **Reordenação Prioritária na Seção de Add-ons:** Na aba de Add-ons, os Add-ons de Vídeo, Programas e Aplicativos Android foram promovidos para o topo da lista, ficando acima das categorias de repositório.
+            #### 1. 🎬 Correções Críticas de Vídeo, Demux e Qualidade de Imagem:
+            - **Remoção do Pós-Processamento CPU Forçado (`CVideoSettings::m_PostProcess = false`):** Removido o filtro automático `libpostproc` (`ha:128:7,va,dr`) em streams por software que embaçava a imagem e elevava o uso da CPU Cortex-A55.
+            - **Escalonamento GPU Otimizado (`VS_SCALINGMETHOD_SPLINE36_FAST` + `videoplayer.hqscalers = 20`):** Substituído o shader multi-pass `SPLINE36` contínuo por `SPLINE36_FAST` ativo apenas quando há upscaling relevante (>=20%), eliminando overhead de FBO na GPU Mali-G310 V2 em vídeos 1080p/4K nativos sem perda de nitidez em conteúdos <=720p.
+            - **Remoção do Probe Limitado no `CDVDDemuxFFmpeg`:** Removida a restrição artificial que forçava `probesize=131072`, `analyzeduration=500000` e `AVFMT_FLAG_NOBUFFER` para qualquer stream HTTP não-seekable, restaurando detecção completa de faixas de áudio/legenda, HDR e eliminando micro-engasgos por jitter de rede.
+            - **Seleção Automática Real de Áudio e Legendas PT-BR (`VideoPlayer`):** Adicionado fallback automático bidirecional entre `pob` ("Portuguese (Brazil)") e `por`/`pt` em `PredicateAudioFilter`, `PredicateSubtitleFilter`, `PredicateSubtitlePriority` e `AdaptForcedSubtitles()`, mantendo prioridade para `pob` exato quando disponível.
 
-            #### 2. ⚡ Otimizações Globais de Rede para Add-ons (Cura para atrasos e Erro 410):
-            - **Forçamento de Resolução IPv4 (`<disableipv6>true</disableipv6>`):** Desativa tentativas de resolução DNS e conexões IPv6 nos módulos cURL do Kodi. Elimina atrasos de 20 a 45 segundos para iniciar filmes e canais ao vivo decorrentes de rotas IPv6 problemáticas em operadoras de banda larga.
-            - **Timeouts Rápidos de Scraper e Conexão:** `curlclienttimeout` = 10s e `curllowspeedtime` = 10s para garantir failover rápido caso uma fonte ou link demore para responder, sem congelar o player.
-            - **Keep-Alive Otimizado (`curlkeepaliveinterval = 15`):** Mantém conexões TCP persistentes abertas com CDNs e servidores de streaming.
-            - **Controle de Inchaço de Pacotes (`<packagefoldersize>20</packagefoldersize>`):** Impede acúmulo excessivo de arquivos residuais no armazenamento interno flash de 32GB da Mi Box.
+            #### 2. ⚡ Fluidez da Interface TV, Android 14 e Economia de RAM (2 GB):
+            - **Navegação D-Pad Instantânea (`Home.xml` / `Includes_Home.xml`):** Reduzido `scrolltime` de listas/menus de `500 ms` para `140–150 ms`, animações de zoom ao focar de `200 ms` para `80 ms`, e desativado o decode oculto do controle `multiimage` de fanart quando `bg_overlay` está transparente (`00000000`). Também corrigida a condição de visibilidade do aviso de biblioteca vazia para considerar `Container(5090)`.
+            - **Decodificação JPEG Reduzida em Memória (`PR #29995`):** `CTextureCacheJob` e `CFFmpegImage` agora leem dimensões no cabeçalho SOF JPEG e usam `lowres` do FFmpeg dentro do limite de `imageres`/`fanartres`, evitando picos de memória RAM em capas/fanarts 4K+.
+            - **Dirty Regions & Smart Redraw (`advancedsettings.xml` + 7 PRs do `guilib`):** Limpeza de tags inexistentes (`<packagecache>`, `<video><deband>`) e arquivo órfão `userdata/advancedsettings.xml`; ativado `<gui><smartredraw>true</smartredraw></gui>` junto aos backports do Kodi 22 (`PR #29971`, `#29972`, `#30052`, `#30088`, `#30400`, `#30419`, `#30439`).
+            - **Correções Android 14 / Google TV:** Desativado `android:enableOnBackInvokedCallback="false"` (`PR #29310`) para impedir que o botão Voltar feche o app; corrigido handoff de foco `Splash -> Main` (`PR #29443`); proteção contra crash em ícones adaptativos sem dimensões intrínsecas (`PR #29456`); preservação do modo desktop atual em `CWinSystemAndroid::UpdateResolutions` (`PR #30496`).
 
-            #### 3. 🛠️ Backports Oficiais do Kodi v22 Piers (Versão Beta / Upstream):
-            - **AudioEngine Flush Fix (PR #30106 / Issue #29470):** Implementado descarte imediato de buffers residuais e frames desatualizados em `AESinkAUDIOTRACK` durante saltos no vídeo (seeks/avanços). Elimina o descompasso progressivo entre áudio e vídeo e engasgos em passthrough.
-            - **MediaCodec SPS/PPS Reconfigure Fix (PR #30453 / Issue #30448):** Corrigido o método `CDVDVideoCodecAndroidMediaCodec::Reconfigure` para reconfigurar os decodificadores de hardware MediaCodec sempre que houver variação de SPS/PPS (extradata) no fluxo de vídeo, corrigindo congelamentos com tela preta ao trocar de canal ou episódio.
-
-            #### 4. 🔑 Atualização Direta:
-            - **Mesma Chave Criptográfica:** Assinado com a chave persistente `mibox-release.keystore`. Permite instalação como atualização direta por cima da build anterior, preservando todas as configurações e add-ons já instalados.
+            #### 3. 🔊 Estabilidade de Áudio, Sincronia A/V e MediaCodec (Backports Kodi 22 Piers):
+            - **Sem Cortes Falsos no `AESinkAUDIOTRACK` (`PR #30739`):** Introduzido `m_stuckIndicator` para que `GetDelay()` não incremente `m_stuckCounter` sem escrita real de pacotes, evitando reaberturas e cortes de áudio.
+            - **Início Audível e Sincronia Passthrough RAW (`PR #29498`, `#29984`, `#29991`, `#30490`, `#30724`, `#30737`):** Estima atraso inicial em passthrough RAW (`GetRawStartupDelay()`), consulta atraso do sink quando pacotes RAW são descartados para sync, descarta buffers RAW/transcode antigos ao pausar (`TrueHD`/`DTS-HD`), e mantém áudio inicial audível até `500 ms` sincronizando suavemente pelo relógio do player em PCM.
+            - **Estabilidade MediaCodec, MPEG-TS, Rede HTTP/2 e Seek (`PR #28539`, `#28628`, `#28967`, `#29062`, `#29078`, `#29452`, `#29993`, `#30059`, `#30134`, `#30283`, `#30413`):** Mutex entre `ReleaseOutputBuffer` e `MediaCodec::flush()` + invalidação de buffers; reset de contexto SPS/PPS em `BitstreamConverter`; preservação de `changes` e `DMX_SPECIALID_STREAMCHANGE` em seek MPEG-TS; detecção HDR PQ corrigida por função de transferência; encerramento abortável em troca de taxa de atualização (`SendMsgAbortable`); eliminação de espera de 200 ms em HTTP/2 no `CurlFile` (`timeout == 0`) + retry em `CURLE_SEND_ERROR`; fim do replay de seek no EOF no `FileCache`.
           files: /tmp/release_apks/*.apk
           draft: false
           prerelease: false

@@ -376,12 +376,12 @@ void CFileCache::Process()
 
         m_pCache->EndOfInput();
 
-        // The thread event will now also cause the wait of an event to return a false.
-        if (AbortableWait(m_seekEvent) == WAIT_SIGNALED)
+        // Wait directly on m_seekEvent rather than AbortableWait (whose CEventGroup phase can
+        // replay an already consumed Set() at EOF); shutdown still wakes via StopThread().
+        if (!m_bStop && m_seekEvent.Wait() && !m_bStop)
         {
           m_pCache->ClearEndOfInput();
-          if (!m_bStop)
-            m_seekEvent.Set(); // hack so that later we realize seek is needed
+          m_seekEvent.Set(); // hack so that later we realize seek is needed
         }
         else
           break; // while (!m_bStop)

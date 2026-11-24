@@ -1553,7 +1553,8 @@ int CCurlFile::Stat(const CURL& url, struct __stat64* buffer)
 
   if(result == CURLE_GOT_NOTHING
   || result == CURLE_HTTP_RETURNED_ERROR
-  || result == CURLE_RECV_ERROR /* some silly shoutcast servers */ )
+  || result == CURLE_RECV_ERROR /* some silly shoutcast servers */
+  || result == CURLE_SEND_ERROR)
   {
     /* some http servers and shoutcast servers don't give us any data on a head request */
     /* request normal and just bail out via progress meter callback after we received data */
@@ -1749,7 +1750,8 @@ int8_t CCurlFile::CReadState::FillBuffer(unsigned int want)
                   msg->data.result == CURLE_PARTIAL_FILE       ||
                   msg->data.result == CURLE_COULDNT_CONNECT    ||
                   msg->data.result == CURLE_HTTP2_STREAM       ||
-                  msg->data.result == CURLE_RECV_ERROR)        &&
+                  msg->data.result == CURLE_RECV_ERROR         ||
+                  msg->data.result == CURLE_SEND_ERROR)        &&
                   !m_bFirstLoop)
             {
               bRetryNow = false; // Leave it to caller whether the operation is retried
@@ -1831,7 +1833,14 @@ int8_t CCurlFile::CReadState::FillBuffer(unsigned int want)
         g_curlInterface.multi_fdset(m_multiHandle, &fdread, &fdwrite, &fdexcep, &maxfd);
 
         long timeout = 0;
-        if (CURLM_OK != g_curlInterface.multi_timeout(m_multiHandle, &timeout) || timeout == -1 || timeout < 200)
+        const CURLMcode timeoutResult = g_curlInterface.multi_timeout(m_multiHandle, &timeout);
+
+        // libcurl wants to be called again at once, e.g. it holds HTTP/2 data
+        // it has already read from the socket, which select() cannot report
+        if (timeoutResult == CURLM_OK && timeout == 0)
+          continue;
+
+        if (timeoutResult != CURLM_OK || timeout == -1 || timeout < 200)
           timeout = 200;
 
         XbmcThreads::EndTime<> endTime{std::chrono::milliseconds(timeout)};

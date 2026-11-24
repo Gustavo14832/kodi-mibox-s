@@ -120,21 +120,31 @@ void CGUIControl::DynamicResourceAlloc(bool bOnOff)
 // 3. reset the animation transform
 void CGUIControl::DoProcess(unsigned int currentTime, CDirtyRegionList &dirtyregions)
 {
-  CRect dirtyRegion = m_renderRegion;
+  const CRect renderRegion = m_renderRegion;
+  CRect dirtyRegion = GetDrawnRegion();
 
   bool changed = (m_controlDirtyState & DIRTY_STATE_CONTROL) != 0 || (m_bInvalidated && IsVisible());
   m_controlDirtyState = 0;
 
-  if (Animate(currentTime))
-    MarkDirtyRegion();
+  // If the control has an active animation, mark it as dirty even if culled because the
+  // animation might change the alpha at a later time so processing needs to continue
+  const bool wasVisible = IsVisible();
+  const bool animated = Animate(currentTime);
+
+  const bool culled = m_transform.alpha <= 0.01f;
 
   // if the control changed culling state from true to false, mark it
-  const bool culled = m_transform.alpha <= 0.01f;
-  if (m_isCulled != culled)
+  const bool cullingChanged = m_isCulled != culled;
+
+  // animations of hidden controls aren't drawn
+  if (cullingChanged || (animated && (wasVisible || IsVisible())))
   {
-    m_isCulled = false;
+    m_isCulled = false; // set to false so MarkDirtyRegion() isn't a no-op
     MarkDirtyRegion();
   }
+  else if (animated && (m_visible == DELAYED || IsAnimating(ANIM_TYPE_FOCUS) ||
+                        IsAnimating(ANIM_TYPE_UNFOCUS) || IsAnimating(ANIM_TYPE_WINDOW_CLOSE)))
+    MarkDirtyRegion(DIRTY_STATE_CHILD); // keep processing for delays, focus actions and closing
   m_isCulled = culled;
 
   if (IsVisible())
@@ -146,11 +156,9 @@ void CGUIControl::DoProcess(unsigned int currentTime, CDirtyRegionList &dirtyreg
     Process(currentTime, dirtyregions);
     m_bInvalidated = false;
 
-    if (dirtyRegion != m_renderRegion)
-    {
-      dirtyRegion.Union(m_renderRegion);
+    if (renderRegion != m_renderRegion)
       changed = true;
-    }
+    dirtyRegion.Union(GetDrawnRegion());
 
     if (m_hasCamera)
       CServiceBroker::GetWinSystem()->GetGfxContext().RestoreCameraPosition();
@@ -625,8 +633,9 @@ void CGUIControl::UpdateVisibility(const CGUIListItem *item)
   for (unsigned int i = 0; i < m_animations.size(); i++)
   {
     CAnimation &anim = m_animations[i];
-    if (anim.GetType() == ANIM_TYPE_CONDITIONAL)
-      anim.UpdateCondition(item);
+    // a reset animation isn't processed anymore, so it doesn't mark the control dirty itself
+    if (anim.GetType() == ANIM_TYPE_CONDITIONAL && anim.UpdateCondition(item))
+      MarkDirtyRegion();
   }
   // and check for conditional enabling - note this overrides SetEnabled() from the code currently
   // this may need to be reviewed at a later date
