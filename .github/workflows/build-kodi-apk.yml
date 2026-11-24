@@ -6,11 +6,11 @@ on:
       abi:
         description: 'Target architecture'
         required: true
-        default: 'arm64-v8a'
+        default: 'armeabi-v7a'
         type: choice
         options:
-          - arm64-v8a
           - armeabi-v7a
+          - arm64-v8a
       app_name:
         description: 'App display name'
         required: true
@@ -42,7 +42,7 @@ on:
 
 jobs:
   build:
-    name: Build APK (${{ github.event.inputs.abi || 'arm64-v8a' }})
+    name: Build APK (${{ github.event.inputs.abi || 'armeabi-v7a' }})
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     permissions:
@@ -55,7 +55,7 @@ jobs:
       - name: Parse ABI selection
         id: abi
         run: |
-          RAW="${{ github.event.inputs.abi || 'arm64-v8a' }}"
+          RAW="${{ github.event.inputs.abi || 'armeabi-v7a' }}"
           ABI="${RAW%% *}"
           echo "value=$ABI" >> $GITHUB_OUTPUT
           case "$ABI" in
