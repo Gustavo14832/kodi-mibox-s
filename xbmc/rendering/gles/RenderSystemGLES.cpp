@@ -648,6 +648,11 @@ GLint CRenderSystemGLES::GUIShaderGetField()
   return -1;
 }
 
+GLint CRenderSystemGLES::GUIShaderGetVideoDetail()
+{
+  return m_pShader[m_method] ? m_pShader[m_method]->GetVideoDetailLoc() : -1;
+}
+
 GLint CRenderSystemGLES::GUIShaderGetStep()
 {
   if (m_pShader[m_method])

@@ -121,6 +121,7 @@ public:
   GLint GUIShaderGetCoord0Matrix();
   GLint GUIShaderGetField();
   GLint GUIShaderGetStep();
+  GLint GUIShaderGetVideoDetail();
   GLint GUIShaderGetContrast();
   GLint GUIShaderGetBrightness();
   GLint GUIShaderGetModel();

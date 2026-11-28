@@ -10,6 +10,8 @@
 
 #include "cores/VideoPlayer/VideoRenderers/LinuxRendererGLES.h"
 
+#include <atomic>
+
 class CRendererMediaCodec : public CLinuxRendererGLES
 {
 public:
@@ -26,6 +28,8 @@ public:
 
   // Feature support
   CRenderInfo GetRenderInfo() override;
+  using CLinuxRendererGLES::Supports;
+  bool Supports(ERENDERFEATURE feature) const override;
 
 protected:
   // textures
@@ -38,5 +42,7 @@ protected:
   bool RenderHook(int index) override;
 
 private:
+  std::atomic_bool m_detailAvailable{false};
+  bool m_sdrProgressive[NUM_BUFFERS]{};
   float m_textureMatrix[16];
 };

@@ -38,7 +38,9 @@
 #include "platform/android/activity/JNIXBMCSurfaceTextureOnFrameAvailableListener.h"
 #include "platform/android/activity/XBMCApp.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cassert>
 #include <memory>
 #include <mutex>
@@ -1447,40 +1449,42 @@ void CDVDVideoCodecAndroidMediaCodec::InjectExtraData(CJNIMediaFormat& mediaform
 
 std::vector<uint8_t> CDVDVideoCodecAndroidMediaCodec::GetHDRStaticMetadata()
 {
-  std::vector<uint8_t> metadata;
-  if (m_hints.masteringMetadata)
+  const auto* display = m_hints.masteringMetadata.get();
+  const auto* light = m_hints.contentLightMetadata.get();
+  if ((!display || (!display->has_primaries && !display->has_luminance)) &&
+      (!light || (!light->MaxCLL && !light->MaxFALL)))
+    return {};
+
+  // CTA-861.3 type 1: descriptor byte followed by 12 little-endian words.
+  // Leave absent fields zero. Content light levels can be signalled independently.
+  std::vector<uint8_t> metadata(25, 0);
+  const auto writeWord = [&metadata](size_t index, double value)
   {
-    // for more information, see CTA+861.3-A standard document
-    static const double MAX_CHROMATICITY = 50000;
-    static const double MAX_LUMINANCE = 10000;
-    metadata.resize(25);
-    metadata[0] = 0;
-    unsigned short* data = reinterpret_cast<unsigned short*>(&metadata[1]);
-    data[0] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[0][0]) * MAX_CHROMATICITY + 0.5);
-    data[1] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[0][1]) * MAX_CHROMATICITY + 0.5);
-    data[2] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[1][0]) * MAX_CHROMATICITY + 0.5);
-    data[3] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[1][1]) * MAX_CHROMATICITY + 0.5);
-    data[4] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[2][0]) * MAX_CHROMATICITY + 0.5);
-    data[5] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->display_primaries[2][1]) * MAX_CHROMATICITY + 0.5);
-    data[6] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->white_point[0]) * MAX_CHROMATICITY + 0.5);
-    data[7] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->white_point[1]) * MAX_CHROMATICITY + 0.5);
-    data[8] = static_cast<unsigned short>(av_q2d(m_hints.masteringMetadata->max_luminance) + 0.5);
-    data[9] = static_cast<unsigned short>(
-        av_q2d(m_hints.masteringMetadata->min_luminance) * MAX_LUMINANCE + 0.5);
-    // we can have HDR content that does not provide content light level metadata
-    if (m_hints.contentLightMetadata)
+    if (!std::isfinite(value))
+      return;
+    const auto word = static_cast<uint16_t>(std::round(std::clamp(value, 0.0, 65535.0)));
+    metadata[1 + 2 * index] = static_cast<uint8_t>(word);
+    metadata[2 + 2 * index] = static_cast<uint8_t>(word >> 8);
+  };
+  if (display && display->has_primaries)
+  {
+    for (size_t i = 0; i < 3; ++i)
     {
-      data[10] = static_cast<unsigned short>(m_hints.contentLightMetadata->MaxCLL);
-      data[11] = static_cast<unsigned short>(m_hints.contentLightMetadata->MaxFALL);
+      writeWord(2 * i, av_q2d(display->display_primaries[i][0]) * 50000.0);
+      writeWord(2 * i + 1, av_q2d(display->display_primaries[i][1]) * 50000.0);
     }
+    writeWord(6, av_q2d(display->white_point[0]) * 50000.0);
+    writeWord(7, av_q2d(display->white_point[1]) * 50000.0);
+  }
+  if (display && display->has_luminance)
+  {
+    writeWord(8, av_q2d(display->max_luminance));
+    writeWord(9, av_q2d(display->min_luminance) * 10000.0);
+  }
+  if (light)
+  {
+    writeWord(10, light->MaxCLL);
+    writeWord(11, light->MaxFALL);
   }
   return metadata;
 }

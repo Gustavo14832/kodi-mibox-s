@@ -60,6 +60,10 @@ bool CRendererMediaCodec::Register()
 void CRendererMediaCodec::AddVideoPicture(const VideoPicture &picture, int index)
 {
   CPictureBuffer &buf = m_buffers[index];
+  m_sdrProgressive[index] = picture.hdrType == StreamHdrType::HDR_TYPE_NONE &&
+                            picture.color_transfer != AVCOL_TRC_SMPTE2084 &&
+                            picture.color_transfer != AVCOL_TRC_ARIB_STD_B67 &&
+                            (picture.iFlags & DVP_FLAG_INTERLACED) == 0;
   CMediaCodecVideoBuffer *videoBuffer;
   if (picture.videoBuffer && (videoBuffer = dynamic_cast<CMediaCodecVideoBuffer*>(picture.videoBuffer)))
   {
@@ -99,6 +103,13 @@ CRenderInfo CRendererMediaCodec::GetRenderInfo()
   return info;
 }
 
+bool CRendererMediaCodec::Supports(ERENDERFEATURE feature) const
+{
+  if (feature == RENDERFEATURE_SHARPNESS)
+    return m_detailAvailable.load();
+  return CLinuxRendererGLES::Supports(feature);
+}
+
 bool CRendererMediaCodec::LoadShadersHook()
 {
   CLog::Log(LOGINFO, "GL: Using MediaCodec render method");
@@ -122,6 +133,7 @@ bool CRendererMediaCodec::RenderHook(int index)
   if (m_currentField != FIELD_FULL)
   {
     renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_RGBA_BOB_OES);
+    m_detailAvailable.store(false);
     GLint   fieldLoc = renderSystem->GUIShaderGetField();
     GLint   stepLoc = renderSystem->GUIShaderGetStep();
 
@@ -133,7 +145,16 @@ bool CRendererMediaCodec::RenderHook(int index)
     glUniform1f(stepLoc, 1.0f / (float)plane.texheight);
   }
   else
+  {
     renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_RGBA_OES);
+    const GLint detail = renderSystem->GUIShaderGetVideoDetail();
+    const bool available = detail >= 0 && m_sdrProgressive[index] && plane.texwidth && plane.texheight;
+    m_detailAvailable.store(available);
+    if (available)
+      glUniform3f(detail, 1.0f / plane.texwidth, 1.0f / plane.texheight, m_videoSettings.m_Sharpness);
+    else
+      glUniform3f(detail, 0.0f, 0.0f, 0.0f);
+  }
 
   GLint   contrastLoc = renderSystem->GUIShaderGetContrast();
   glUniform1f(contrastLoc, m_videoSettings.m_Contrast * 0.02f);

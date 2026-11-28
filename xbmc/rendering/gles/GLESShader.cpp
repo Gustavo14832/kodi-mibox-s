@@ -45,6 +45,7 @@ void CGLESShader::OnCompiledAndLinked()
   m_hTex1   = glGetUniformLocation(ProgramHandle(), "m_samp1");
   m_hUniCol = glGetUniformLocation(ProgramHandle(), "m_unicol");
   m_hField  = glGetUniformLocation(ProgramHandle(), "m_field");
+  m_hVideoDetail = glGetUniformLocation(ProgramHandle(), "m_videoDetail");
   m_hStep   = glGetUniformLocation(ProgramHandle(), "m_step");
   m_hContrast   = glGetUniformLocation(ProgramHandle(), "m_contrast");
   m_hBrightness = glGetUniformLocation(ProgramHandle(), "m_brightness");

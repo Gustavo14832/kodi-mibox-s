@@ -22130,3 +22130,11 @@ msgstr ""
 #~ msgctxt "#24163"
 #~ msgid "Match Apple tvOS Standard (Siri remote)"
 #~ msgstr "Corresponder Padrão do Apple tvOS (Siri remota)"
+
+msgctxt "#39980"
+msgid "Prefer 1080p for video playback"
+msgstr "Preferir 1080p na reprodução de vídeo"
+
+msgctxt "#39981"
+msgid "With automatic refresh rate switching and an empty whitelist, prefer a compatible 1920x1080 display mode. Keeps the normal selection when a matching mode is unavailable."
+msgstr "Com a troca automática de taxa de atualização e a lista de modos permitidos vazia, prioriza um modo de tela 1920x1080 compatível. Usa a seleção normal quando não houver um modo correspondente."

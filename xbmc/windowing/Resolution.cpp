@@ -18,6 +18,8 @@
 #include "utils/Variant.h"
 #include "utils/log.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <limits>
 
@@ -27,6 +29,43 @@ namespace
 const char* SETTING_VIDEOSCREEN_WHITELIST_PULLDOWN{"videoscreen.whitelistpulldown"};
 const char* SETTING_VIDEOSCREEN_WHITELIST_DOUBLEREFRESHRATE{
     "videoscreen.whitelistdoublerefreshrate"};
+
+#ifdef TARGET_ANDROID
+RESOLUTION FindFullHdMode(const std::vector<RESOLUTION>& modes, float fps, RESOLUTION current)
+{
+  if (!(fps > 0.0f))
+    return RES_INVALID;
+
+  // Prefer field-rate output for 25/30 fps, where the input may be interlaced.
+  std::array<float, 6> cadence{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 2.5f};
+  if (MathUtils::FloatEquals(fps, 25.0f, 0.05f) || MathUtils::FloatEquals(fps, 30.0f, 0.05f))
+    std::swap(cadence[0], cadence[1]);
+
+  const auto& gfx = CServiceBroker::GetWinSystem()->GetGfxContext();
+  for (float multiple : cadence)
+  {
+    RESOLUTION match = RES_INVALID;
+    for (const auto mode : modes)
+    {
+      if (mode < RES_DESKTOP)
+        continue;
+      const auto info = gfx.GetResInfo(mode);
+      if (info.iScreenWidth != 1920 || info.iScreenHeight != 1080 ||
+          (info.dwFlags & D3DPRESENTFLAG_MODEMASK) != 0 ||
+          !MathUtils::FloatEquals(info.fRefreshRate / multiple, fps, 0.01f))
+        continue;
+
+      if (mode == current)
+        return current;
+      if (match == RES_INVALID)
+        match = mode;
+    }
+    if (match != RES_INVALID)
+      return match;
+  }
+  return RES_INVALID;
+}
+#endif
 
 } // namespace
 
@@ -105,6 +144,20 @@ void CResolutionUtils::FindResolutionFromWhitelist(float fps, int width, int hei
     RESOLUTION_INFO info;
     std::string resString;
     CServiceBroker::GetWinSystem()->GetGfxContext().GetAllowedResolutions(candidates);
+#ifdef TARGET_ANDROID
+    if (!is3D && resolution >= RES_DESKTOP && CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+            "videoscreen.prefer1080p"))
+    {
+      const auto fullHd = FindFullHdMode(candidates, fps, resolution);
+      if (fullHd != RES_INVALID)
+      {
+        resolution = fullHd;
+        CLog::Log(LOGDEBUG, "[WHITELIST] Preferred 1080p output for {:.3f} fps: {}", fps,
+                  CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(fullHd).strMode);
+        return;
+      }
+    }
+#endif
     for (const auto& c : candidates)
     {
       info = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo(c);

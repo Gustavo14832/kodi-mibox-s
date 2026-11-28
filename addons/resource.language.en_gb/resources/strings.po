@@ -24363,3 +24363,11 @@ msgid "50th Anniversary Edition"
 msgstr ""
 
 # 40000 to 40800 are reserved for Video Versions feature
+
+msgctxt "#39980"
+msgid "Prefer 1080p for video playback"
+msgstr ""
+
+msgctxt "#39981"
+msgid "With automatic refresh rate switching and an empty whitelist, prefer a compatible 1920x1080 display mode. Keeps the normal selection when a matching mode is unavailable."
+msgstr ""

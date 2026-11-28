@@ -27,6 +27,7 @@ public:
   GLint GetCord1Loc() { return m_hCord1; }
   GLint GetUniColLoc() { return m_hUniCol; }
   GLint GetCoord0MatrixLoc() { return m_hCoord0Matrix; }
+  GLint GetVideoDetailLoc() const { return m_hVideoDetail; }
   GLint GetFieldLoc() { return m_hField; }
   GLint GetStepLoc() { return m_hStep; }
   GLint GetContrastLoc() { return m_hContrast; }
@@ -49,6 +50,7 @@ protected:
   GLint m_hCord0 = 0;
   GLint m_hCord1 = 0;
   GLint m_hCoord0Matrix = 0;
+  GLint m_hVideoDetail{-1};
   GLint m_hField = 0;
   GLint m_hStep = 0;
   GLint m_hContrast = 0;
